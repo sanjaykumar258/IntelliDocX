@@ -151,10 +151,14 @@ export const UserManagement = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border-slate-200 dark:border-slate-800 font-medium">
+                    <SelectItem value="SUPER_ADMIN"><span className="text-red-600 dark:text-red-400 font-bold">Super Admin</span></SelectItem>
                     <SelectItem value="ADMIN"><span className="text-purple-600 dark:text-purple-400 font-bold">Admin</span></SelectItem>
                     <SelectItem value="MANAGER">Manager</SelectItem>
+                    <SelectItem value="HR_MANAGER">HR Manager</SelectItem>
+                    <SelectItem value="IT_MANAGER">IT Manager</SelectItem>
+                    <SelectItem value="TEAM_LEAD">Team Lead</SelectItem>
                     <SelectItem value="EMPLOYEE">Employee</SelectItem>
-                    <SelectItem value="VIEWER">Viewer</SelectItem>
+                    <SelectItem value="GUEST">Guest</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -225,11 +229,14 @@ export const UserManagement = () => {
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-[10px] font-bold tracking-wider uppercase ${
+                          u.role === 'SUPER_ADMIN' ? 'bg-red-100 text-red-700 dark:bg-red-500/10 dark:text-red-400 ring-1 ring-red-500/20' : 
                           u.role === 'ADMIN' ? 'bg-purple-100 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400 ring-1 ring-purple-500/20' : 
-                          u.role === 'MANAGER' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 ring-1 ring-blue-500/20' : 
+                          u.role === 'MANAGER' || u.role === 'HR_MANAGER' || u.role === 'IT_MANAGER' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 ring-1 ring-blue-500/20' : 
+                          u.role === 'TEAM_LEAD' ? 'bg-teal-100 text-teal-700 dark:bg-teal-500/10 dark:text-teal-400 ring-1 ring-teal-500/20' : 
+                          u.role === 'GUEST' ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400 ring-1 ring-amber-500/20' : 
                           'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 ring-1 ring-slate-500/20'
                         }`}>
-                          {u.role}
+                          {u.role?.replace(/_/g, ' ')}
                         </span>
                       </td>
                       <td className="px-6 py-4">

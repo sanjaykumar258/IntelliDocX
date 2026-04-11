@@ -4,7 +4,7 @@ import { jwtDecode } from 'jwt-decode';
 interface User {
   id: string;
   email: string;
-  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'HR_MANAGER' | 'IT_MANAGER' | 'TEAM_LEAD' | 'EMPLOYEE' | 'GUEST';
   organizationId: string;
   name: string;
 }

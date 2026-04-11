@@ -13,6 +13,9 @@ import { useToast } from '@/components/ui/use-toast';
 import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import { useSelector, useDispatch } from 'react-redux';
+import { RootState } from '@/store';
+import { setIntelliBotOpen } from '@/features/ui/uiSlice';
 
 interface Message {
     role: 'user' | 'assistant';
@@ -20,7 +23,8 @@ interface Message {
 }
 
 export const IntelliBot: React.FC = () => {
-    const [isOpen, setIsOpen] = useState(false);
+    const dispatch = useDispatch();
+    const { isIntelliBotOpen: isOpen } = useSelector((state: RootState) => state.ui);
     const [mode, setMode] = useState<'system' | 'document'>('system');
     const [messages, setMessages] = useState<Record<string, Message[]>>({
         system: [{
@@ -40,6 +44,8 @@ export const IntelliBot: React.FC = () => {
     // Document selection state
     const [documents, setDocuments] = useState<any[]>([]);
     const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
+
+    const setIsOpen = (val: boolean) => dispatch(setIntelliBotOpen(val));
 
     useEffect(() => {
         if (isOpen && documents.length === 0) {

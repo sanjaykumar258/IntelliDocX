@@ -4,14 +4,11 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 
-// Use DIRECT_URL if available for local seeding
 const url = process.env.DIRECT_URL || process.env.DATABASE_URL;
 
 const prisma = new PrismaClient({
   datasources: {
-    db: {
-      url,
-    },
+    db: { url },
   },
 });
 
@@ -22,12 +19,13 @@ async function main() {
 
   console.log(`Seeding default data using connection: ${url}`);
 
-  // Clean up existing data to avoid conflicts
+  // Clean up existing data
   console.log('Cleaning up existing data...');
-  // Delete in order to avoid foreign key constraints
   await prisma.workflowLog.deleteMany();
   await prisma.approvalAction.deleteMany();
   await prisma.workflowInstance.deleteMany();
+  await prisma.documentComment.deleteMany();
+  await prisma.documentShare.deleteMany();
   await prisma.documentVersion.deleteMany();
   await prisma.documentMetadata.deleteMany();
   await prisma.auditLog.deleteMany();
@@ -39,16 +37,27 @@ async function main() {
   await prisma.permissionGrant.deleteMany();
   await prisma.actionApproval.deleteMany();
   await prisma.userInvitation.deleteMany();
+  await prisma.userNotificationPreference.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.loginHistory.deleteMany();
   await prisma.searchHistory.deleteMany();
   await prisma.savedSearch.deleteMany();
+  // Clean IT & HR tables
+  await prisma.ticketAttachment.deleteMany();
+  await prisma.ticketMessage.deleteMany();
+  await prisma.ticket.deleteMany();
+  await prisma.leaveRequest.deleteMany();
+  await prisma.onboardingChecklist.deleteMany();
+  await prisma.hrDocument.deleteMany();
+  await prisma.hrEmployee.deleteMany();
+  await prisma.announcement.deleteMany();
+  // Clean core tables
   await prisma.document.deleteMany();
   await prisma.folder.deleteMany();
   await prisma.user.deleteMany();
   await prisma.organization.deleteMany();
 
-  // Create default Organization
+  // Create Organization
   const org = await prisma.organization.create({
     data: {
       id: 'f47ac10b-58cc-4372-a567-0e02b2c3d479',
@@ -57,23 +66,16 @@ async function main() {
     },
   });
 
-  // Create Users
+  // Create Users for ALL 8 roles
   const users = [
-    {
-      email: 'admin@acme.com',
-      name: 'System Admin',
-      role: Role.ADMIN,
-    },
-    {
-      email: 'manager@acme.com',
-      name: 'Manager User',
-      role: Role.MANAGER,
-    },
-    {
-      email: 'employee@acme.com',
-      name: 'Employee User',
-      role: Role.EMPLOYEE,
-    },
+    { email: 'superadmin@acme.com', name: 'Super Admin', role: Role.SUPER_ADMIN },
+    { email: 'admin@acme.com', name: 'System Admin', role: Role.ADMIN },
+    { email: 'manager@acme.com', name: 'Department Manager', role: Role.MANAGER },
+    { email: 'hr@acme.com', name: 'HR Manager', role: Role.HR_MANAGER },
+    { email: 'it@acme.com', name: 'IT Manager', role: Role.IT_MANAGER },
+    { email: 'teamlead@acme.com', name: 'Team Lead', role: Role.TEAM_LEAD },
+    { email: 'employee@acme.com', name: 'Employee User', role: Role.EMPLOYEE },
+    { email: 'guest@acme.com', name: 'Guest Viewer', role: Role.GUEST },
   ];
 
   for (const user of users) {
@@ -89,25 +91,16 @@ async function main() {
     });
   }
 
-  console.log('\n-------------------------------------');
-  console.log('SEEDING COMPLETE');
-  console.log('-------------------------------------');
+  console.log('\n=============================================');
+  console.log('    SEEDING COMPLETE — ALL 8 ROLES');
+  console.log('=============================================');
+  console.log('\nAll passwords: ' + commonPassword);
+  console.log('');
+  users.forEach(u => console.log(`  ${u.role.padEnd(14)} → ${u.email}`));
+  console.log('=============================================\n');
 
-  console.log('\nADMIN LOGIN:');
-  console.log('Email: admin@acme.com');
-  console.log(`Password: ${commonPassword}`);
-
-  console.log('\nMANAGER LOGIN:');
-  console.log('Email: manager@acme.com');
-  console.log(`Password: ${commonPassword}`);
-
-  console.log('\nEMPLOYEE LOGIN:');
-  console.log('Email: employee@acme.com');
-  console.log(`Password: ${commonPassword}`);
-  console.log('-------------------------------------\n');
-
-  // Create default Workflow Template for Bug 2 verification
-  console.log('Seeding Workflow Template...');
+  // Create 3-Step Workflow Template: Team Lead → Manager → Admin
+  console.log('Seeding 3-Step Workflow Template...');
   const admin = await prisma.user.findFirst({ where: { role: Role.ADMIN, organizationId: org.id } });
   if (admin) {
     await prisma.workflowTemplate.create({
@@ -119,12 +112,14 @@ async function main() {
         slaHours: 48,
         steps: {
           create: [
-            { order: 1, name: 'Manager Review', requiredRole: Role.MANAGER },
-            { order: 2, name: 'Final Admin Approval', requiredRole: Role.ADMIN, isFinal: true }
+            { order: 1, name: 'Team Lead Review', requiredRole: Role.TEAM_LEAD },
+            { order: 2, name: 'Manager Approval', requiredRole: Role.MANAGER },
+            { order: 3, name: 'Final Admin Approval', requiredRole: Role.ADMIN, isFinal: true }
           ]
         }
       }
     });
+    console.log('  ✓ Template created: Employee → Team Lead → Manager → Admin');
   }
 }
 

@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { X, Download, FileText, ImageIcon, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { api } from '@/api/client';
 
 interface DocumentPreviewModalProps {
   isOpen: boolean;
@@ -25,21 +26,43 @@ export const DocumentPreviewModal = ({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (isOpen && documentId) {
-      setLoading(true);
-      // Construct preview URL for inline viewing
-      const url = `${import.meta.env.VITE_API_URL}/documents/${documentId}/download?inline=true`;
-      setPreviewUrl(url);
-    } else {
-      setPreviewUrl(null);
-    }
-  }, [isOpen, documentId]);
+    let objectUrl: string | null = null;
+    
+    const fetchPreview = async () => {
+      if (isOpen && documentId) {
+        setLoading(true);
+        try {
+          const response = await api.get(`/documents/${documentId}/download?inline=true`, { 
+            responseType: 'blob' 
+          });
+          const blob = new Blob([response.data], { type: mimeType });
+          objectUrl = window.URL.createObjectURL(blob);
+          setPreviewUrl(objectUrl);
+        } catch (error) {
+          console.error("Preview load failed", error);
+          setPreviewUrl(null);
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        setPreviewUrl(null);
+      }
+    };
+    
+    fetchPreview();
+    
+    return () => {
+      if (objectUrl) {
+        window.URL.revokeObjectURL(objectUrl);
+      }
+    };
+  }, [isOpen, documentId, mimeType]);
 
   const isPDF = mimeType.includes('pdf');
   const isImage = mimeType.includes('image') || mimeType.includes('png') || mimeType.includes('jpg') || mimeType.includes('jpeg');
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+    <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
       <DialogContent className="max-w-5xl h-[90vh] p-0 overflow-hidden bg-slate-900/95 border-slate-800 backdrop-blur-3xl shadow-2xl flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-white/10 flex items-center justify-between bg-white/5 backdrop-blur-md shrink-0">

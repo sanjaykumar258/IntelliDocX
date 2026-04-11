@@ -29,6 +29,9 @@ export const createDocument = async (
   },
   filePath?: string
 ) => {
+  if (data.category) {
+    data.category = data.category.toUpperCase().replace(/\s+/g, '_');
+  }
   const doc = await prisma.document.create({
     data: {
       ...data,
@@ -68,23 +71,45 @@ export const getDocumentById = async (id: string, organizationId: string) => {
 
 export const listDocuments = async (organizationId: string, page: number = 1, limit: number = 20, filters?: { category?: string, department?: string }) => {
   const skip = (page - 1) * limit;
-  const cacheKey = `docs:list:${organizationId}:${page}:${limit}:${filters?.category || 'all'}:${filters?.department || 'all'}`;
+  const upperCat = filters?.category?.toUpperCase();
+  const cacheKey = `docs:list:${organizationId}:${page}:${limit}:${upperCat || 'all'}:${filters?.department?.toLowerCase() || 'all'}`;
 
+  // Prevent hanging if Redis is sluggish or disconnected
   if (redisClient.isOpen) {
-    const cached = await redisClient.get(cacheKey);
-    if (cached) {
-      console.log('[Cache] Serving from cache:', cacheKey);
-      return JSON.parse(cached);
+    try {
+      // 1-second timeout for cache retrieval
+      const cached = await Promise.race([
+        redisClient.get(cacheKey),
+        new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Redis Timeout')), 1000))
+      ]);
+      
+      if (cached) {
+        console.log('[Cache] Serving from cache:', cacheKey);
+        return JSON.parse(cached);
+      }
+    } catch (e) {
+      console.warn('[Cache] Redis skip:', e instanceof Error ? e.message : 'Unknown error');
     }
   }
+
+  // Import category groups for parent-category expansion
+  const { CATEGORY_GROUPS } = await import('./documentClassifier.service');
 
   const whereClause: any = {
     organizationId,
     status: { not: DocumentStatus.DELETED },
   };
 
-  if (filters?.category) {
-    whereClause.category = filters.category;
+  // ═══ CATEGORY FILTERING ═══
+  if (upperCat && upperCat !== 'ALL') {
+    // Check if this is a parent category group name (e.g., 'FINANCIAL')
+    if (CATEGORY_GROUPS[upperCat]) {
+      // Expand to all sub-categories in this group (e.g., ['FINANCIAL_STATEMENT', ...])
+      whereClause.category = { in: CATEGORY_GROUPS[upperCat] };
+    } else {
+      // Direct match for specific category
+      whereClause.category = upperCat;
+    }
   }
 
   if (filters?.department) {
@@ -141,6 +166,9 @@ export const deleteDocument = async (id: string) => {
 };
 
 export const createMetadata = async (documentId: string, data: any) => {
+  if (data.category) {
+    data.category = data.category.toUpperCase().replace(/\s+/g, '_');
+  }
   return await prisma.documentMetadata.create({
     data: {
       documentId,

@@ -8,8 +8,17 @@ from app.core.config import settings
 
 class ClassificationService:
     def __init__(self):
-        self.departments = ["HR", "Finance", "Legal", "Engineering", "Operations", "General"]
-        self.categories = ["Invoice", "Contract", "Resume", "Policy", "Report", "Offer Letter", "Uncategorized"]
+        self.departments = ["Legal", "HR", "Reports", "Projects", "Communication", "Financial", "Operations", "Engineering", "General", "AI Insights"]
+        self.categories = [
+            "Contract", "Agreement", "NDA", "Legal Notice", "Compliance", "License",
+            "Resume", "Offer Letter", "Employee Record", "Payslip", "Performance Review", "ID Proof",
+            "Report", "Financial Statement", "Audit Report", "Sales Report", "Project Report", "Market Analysis",
+            "Project Plan", "Proposal", "Presentation", "Meeting Notes", "Task Document", "Technical Documentation",
+            "Email", "Memo", "Letter", "Notice",
+            "Tax Document", "Bank Statement", "Expense Report", "Investment Record",
+            "AI Insight", "User Profile", "Recommendation", "Image Analysis", "Skin Tone Data", "Product Catalog",
+            "Invoice", "Uncategorized"
+        ]
         
         # Initialize Groq client if API key is present
         self.client = None
@@ -21,20 +30,26 @@ class ClassificationService:
         
         # Keyword-based rules for fallback/initialization
         self.rules = {
-            "HR": ["resume", "cv", "hiring", "offer letter", "candidate", "employee", "onboarding"],
-            "Finance": ["invoice", "bill", "payment", "tax", "audit", "salary", "expense"],
-            "Legal": ["contract", "agreement", "nda", "terms", "clause", "signature", "party"],
+            "HR": ["resume", "cv", "hiring", "offer letter", "candidate", "employee", "onboarding", "payslip", "performance"],
+            "Financial": ["invoice", "bill", "payment", "tax", "audit", "salary", "expense", "bank statement", "investment", "financial statement"],
+            "Legal": ["contract", "agreement", "nda", "terms", "clause", "signature", "party", "compliance", "license"],
+            "Projects": ["project", "proposal", "presentation", "meeting notes", "task", "milestone"],
+            "Communication": ["email", "memo", "letter", "notice", "announcement"],
+            "AI Insights": ["insight", "user profile", "recommendation", "image analysis", "skin tone", "catalog"],
             "Engineering": ["design", "architecture", "spec", "diagram", "code", "technical"],
             "Operations": ["schedule", "logistics", "inventory", "supply", "report", "process"]
         }
         
         self.category_rules = {
             "Invoice": ["invoice", "bill to", "total amount", "due date"],
-            "Contract": ["agreement", "parties", "witnesseth", "term"],
-            "Resume": ["experience", "education", "skills", "summary"],
-            "Policy": ["policy", "procedure", "guidelines", "compliance"],
+            "Contract": ["agreement", "parties", "witnesseth", "term", "contract"],
+            "Resume": ["experience", "education", "skills", "summary", "cv"],
             "Report": ["report", "status", "analysis", "findings"],
-            "Offer Letter": ["offer", "salary", "start date", "benefits"]
+            "Offer Letter": ["offer", "salary", "start date", "benefits"],
+            "Financial Statement": ["balance sheet", "income statement", "cash flow", "financial statement"],
+            "Project Plan": ["timeline", "milestone", "project plan", "deliverable"],
+            "Meeting Notes": ["minutes", "attendees", "action items", "meeting"],
+            "AI Insight": ["confidence score", "prediction", "analysis report", "ai generated"]
         }
 
     def classify_document(self, text: str, embedding: List[float] = None) -> Dict[str, Any]:
@@ -61,7 +76,7 @@ class ClassificationService:
         {{
             "department": "One of the allowed departments",
             "category": "One of the allowed categories",
-            "confidenceScore": 0.0 to 1.0,
+            "confidenceScore": 0.0 to 1.0 (Calculate rigor. If the text clearly matches the expected structure, assign a confidence >0.85),
             "suggestedTags": ["tag1", "tag2", ...],
             "extractedData": {{
                 "key": "value"
@@ -71,8 +86,11 @@ class ClassificationService:
         For extractedData:
         - If Invoice: extract 'totalAmount', 'currency', 'invoiceNumber', 'date', 'vendorName', 'gstNumber'.
         - If Resume: extract 'candidateName', 'email', 'phone', 'skills' (list), 'experienceYears'.
-        - If Contract: extract 'parties', 'effectiveDate', 'expiryDate', 'contractValue'.
-        - For others: extract any relevant key metrics or names.
+        - If Contract or Agreement or NDA: extract 'parties', 'effectiveDate', 'expiryDate', 'contractValue', 'governingLaw'.
+        - If Report or Financial Statement: extract 'reportPeriod', 'author', 'totalRevenue', 'keyFinding'.
+        - If Project Plan or Meeting Notes: extract 'projectName', 'projectManager', 'actionItems', 'deadline'.
+        - If AI Insight or User Profile: extract 'predictedCategory', 'confidenceLevel', 'recommendations', 'userTraits'.
+        - For others: extract any relevant key metrics, entities, or names.
         
         Document Text:
         ---

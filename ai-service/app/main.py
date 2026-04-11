@@ -132,13 +132,17 @@ async def search_documents(request: SearchRequest):
         # 3. Format results
         results = []
         for hit in hits:
+            score = hit.get("_score", 0)
+            if score < 0.45:
+                continue
+                
             source = hit.get("_source", {})
             highlight = hit.get("highlight", {}).get("content", [])
             snippet = highlight[0] if highlight else ""
             
             results.append(SearchResult(
                 documentId=source.get("documentId"),
-                score=hit.get("_score"),
+                score=score,
                 department=source.get("department"),
                 category=source.get("category"),
                 tags=source.get("tags", []),

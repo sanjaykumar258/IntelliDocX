@@ -157,9 +157,10 @@ export const processAction = async (
 
     if (!currentStep) throw new Error('Current step not found');
 
-    // Role Validation
-    if (currentStep.requiredRole !== role) {
-      throw new Error(`Unauthorized: Only ${currentStep.requiredRole} can perform this action`);
+    // Role Validation — ADMIN/SUPER_ADMIN can override any step
+    const isAdmin = role === Role.ADMIN || (role as string) === 'SUPER_ADMIN';
+    if (!isAdmin && currentStep.requiredRole !== role) {
+      throw new Error(`Unauthorized: Only ${currentStep.requiredRole} can perform this action at this step`);
     }
 
     if ((action as string) === 'ESCALATE') {

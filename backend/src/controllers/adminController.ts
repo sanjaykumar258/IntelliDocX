@@ -9,7 +9,7 @@ import Logger from '../utils/logger';
 const InviteUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(2),
-  role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'HR_MANAGER', 'IT_MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'GUEST']),
 });
 
 const AcceptInvitationSchema = z.object({
@@ -18,7 +18,7 @@ const AcceptInvitationSchema = z.object({
 });
 
 const ChangeRoleSchema = z.object({
-  role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'HR_MANAGER', 'IT_MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'GUEST']),
 });
 
 const ResolveApprovalSchema = z.object({

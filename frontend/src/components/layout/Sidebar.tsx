@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
-import { LayoutDashboard, FileText, GitPullRequest, Settings, ChevronLeft, Menu, LogOut } from 'lucide-react';
+import { LayoutDashboard, FileText, GitPullRequest, Settings, ChevronLeft, Menu, LogOut, ClipboardList } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -17,33 +17,54 @@ export const Sidebar = ({ className }: SidebarProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = () => {
-    // Assuming a generic logout action exists or just clearing token/redirecting
-    // dispatch(logout());
     window.location.href = '/login';
   };
+
+  // Determine dashboard path based on role
+  const getDashboardPath = () => {
+    const role = user?.role;
+    if (role === 'SUPER_ADMIN' || role === 'ADMIN') return '/dashboard/admin';
+    if (role === 'IT_MANAGER') return '/dashboard/it';
+    if (role === 'HR_MANAGER') return '/dashboard/hr';
+    if (['MANAGER', 'TEAM_LEAD'].includes(role || '')) return '/dashboard/manager';
+    if (role === 'GUEST') return '/dashboard/guest';
+    return '/dashboard/employee';
+  };
+
+  const isAdminOrAbove = ['SUPER_ADMIN', 'ADMIN'].includes(user?.role || '');
 
   const navItems = [
     {
       title: 'Dashboard',
-      href: `/dashboard/${user?.role?.toLowerCase() || 'admin'}`,
+      href: getDashboardPath(),
       icon: LayoutDashboard,
+      show: true,
     },
     {
       title: 'Documents',
       href: '/documents',
       icon: FileText,
+      show: true,
     },
     {
       title: 'Workflows',
       href: '/workflows',
       icon: GitPullRequest,
+      show: user?.role !== 'GUEST',
+    },
+    {
+      title: 'Audit Logs',
+      href: '/audit-logs',
+      icon: ClipboardList,
+      show: isAdminOrAbove,
     },
     {
       title: 'Settings',
       href: '/settings',
       icon: Settings,
+      show: user?.role !== 'GUEST',
     },
-  ];
+  ].filter(item => item.show);
 
   return (
     <>

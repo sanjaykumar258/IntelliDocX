@@ -16,7 +16,7 @@ export const RegisterUserSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: PasswordSchema,
-  role: z.enum(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  role: z.enum(['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'HR_MANAGER', 'IT_MANAGER', 'TEAM_LEAD', 'EMPLOYEE', 'GUEST']),
   organizationId: z.string().uuid(),
 });
 

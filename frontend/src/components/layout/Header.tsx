@@ -111,8 +111,8 @@ export const Header = () => {
 
   return (
     <header className={cn(
-      "h-16 px-6 flex items-center justify-between sticky top-0 z-50 transition-all duration-300",
-      isScrolled ? "glass shadow-sm" : "bg-transparent"
+      "h-16 px-6 flex items-center justify-between sticky top-0 z-50 transition-all duration-300 scroll-gradient-border",
+      isScrolled ? "glass shadow-sm scrolled" : "bg-transparent"
     )}>
       <div className="flex items-center w-full max-w-md">
         <motion.form 
@@ -144,10 +144,10 @@ export const Header = () => {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="relative group rounded-xl">
-              <Bell className="h-5 w-5 text-slate-600 dark:text-slate-400 group-hover:text-indigo-500 transition-colors" />
+            <Button variant="ghost" size="icon" className={cn("relative group rounded-xl", unreadCount > 0 && "bell-pulse")}>
+              <Bell className={cn("h-5 w-5 transition-colors", unreadCount > 0 ? "text-indigo-500" : "text-slate-600 dark:text-slate-400 group-hover:text-indigo-500")} />
               {unreadCount > 0 && (
-                <Badge className="absolute top-1 right-1 h-4 min-w-[16px] flex items-center justify-center p-0.5 bg-indigo-600 text-[9px] text-white border-2 border-background rounded-full">
+                <Badge className="absolute top-0.5 right-0.5 h-4 min-w-[16px] flex items-center justify-center p-0.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-[9px] text-white border-2 border-background rounded-full shadow-lg shadow-indigo-500/30">
                   {unreadCount}
                 </Badge>
               )}

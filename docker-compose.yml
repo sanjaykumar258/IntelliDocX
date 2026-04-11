@@ -32,8 +32,7 @@ services:
     command: >
       sh -c "npm install &&
              npx prisma generate &&
-             npx prisma migrate deploy &&
-             npx prisma db seed &&
+             npx prisma db push &&
              npm run dev"
     depends_on:
       postgres:
@@ -63,7 +62,6 @@ services:
       - MINIO_SECRET_KEY=minioadmin
       - MINIO_BUCKET=intellidocx-documents
       - AI_SERVICE_API_KEY=intellidocx-ai-secret-key
-      - GROQ_API_KEY=${GROQ_API_KEY}
     env_file:
       - .env
       - ./ai-service/.env

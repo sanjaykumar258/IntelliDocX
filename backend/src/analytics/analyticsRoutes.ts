@@ -1,22 +1,17 @@
 import { Router } from 'express';
 import { analyticsController } from './analyticsController';
-import { requireAuth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
-import { Role } from '@prisma/client';
+import { requireMinRole } from '../middleware/rbac';
 
 const router = Router();
 
-// Middleware now handled in app.ts
-// router.use(requireAuth);
-// router.use(tenantMiddleware);
-
+// Personal analytics — all users
 router.get('/me', analyticsController.getPersonalOverview);
 
-// Apply Role Security: Admin/Manager Only for the rest
-router.use(requireRole([Role.ADMIN, Role.MANAGER]));
+// Manager+ can view full analytics
+router.use(requireMinRole('TEAM_LEAD'));
 
 router.get('/overview', analyticsController.getOverview);
-router.get('/dashboard', analyticsController.getOverview); // Alias for dashboard stats
+router.get('/dashboard', analyticsController.getOverview);
 router.get('/documents', analyticsController.getDocumentStats);
 router.get('/workflows', analyticsController.getWorkflowStats);
 router.get('/users', analyticsController.getUserStats);

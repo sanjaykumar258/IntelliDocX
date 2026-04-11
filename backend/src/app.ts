@@ -148,6 +148,44 @@ app.use('/api', protectedMiddleware, notificationRoutes);
 import auditRoutes from './routes/auditRoutes';
 app.use('/api/audit-logs', protectedMiddleware, auditRoutes);
 
+import ticketRoutes from './routes/ticketRoutes';
+app.use('/api/tickets', ticketRoutes);
+
+import hrRoutes from './routes/hrRoutes';
+app.use('/api/hr', hrRoutes);
+// Public Share Endpoint (no auth required)
+app.get('/api/share/:token', async (req, res) => {
+  try {
+    const share = await prisma.documentShare.findUnique({
+      where: { token: req.params.token },
+      include: {
+        document: {
+          include: {
+            owner: { select: { id: true, name: true } },
+            metadata: true,
+          },
+        },
+      },
+    });
+
+    if (!share || !share.isActive) {
+      return res.status(404).json({ message: 'Share link not found or deactivated' });
+    }
+
+    if (share.expiresAt && new Date() > share.expiresAt) {
+      return res.status(410).json({ message: 'Share link has expired' });
+    }
+
+    res.json({
+      document: share.document,
+      permissions: share.permissions,
+      expiresAt: share.expiresAt,
+    });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 // Initialize MinIO Bucket
 ensureBucketExists();
 
@@ -160,6 +198,58 @@ setInterval(async () => {
     Logger.error(`SLA Checker failed: ${err}`);
   }
 }, 15 * 60 * 1000);
+
+// Document Expiry Checker (Run every hour)
+setInterval(async () => {
+  try {
+    Logger.info('Running Document Expiry Checker...');
+    const now = new Date();
+    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    // Find documents expiring within 7 days
+    const expiringSoon = await prisma.document.findMany({
+      where: {
+        expiryDate: { lte: sevenDaysFromNow, gte: now },
+        status: 'ACTIVE',
+      },
+      include: { owner: true },
+    });
+
+    for (const doc of expiringSoon) {
+      const daysLeft = Math.ceil((doc.expiryDate!.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+      await prisma.notification.create({
+        data: {
+          userId: doc.ownerId,
+          organizationId: doc.organizationId,
+          type: 'DOCUMENT',
+          title: 'Document Expiring Soon',
+          message: `"${doc.title}" expires in ${daysLeft} day(s)`,
+        },
+      });
+    }
+
+    // Auto-archive expired documents
+    const expired = await prisma.document.findMany({
+      where: {
+        expiryDate: { lt: now },
+        status: 'ACTIVE',
+        autoArchive: true,
+      },
+    });
+
+    for (const doc of expired) {
+      await prisma.document.update({
+        where: { id: doc.id },
+        data: { status: 'ARCHIVED' },
+      });
+      Logger.info(`Auto-archived expired document: ${doc.title}`);
+    }
+
+    Logger.info(`Expiry check: ${expiringSoon.length} expiring soon, ${expired.length} auto-archived`);
+  } catch (err) {
+    Logger.error(`Expiry Checker failed: ${err}`);
+  }
+}, 60 * 60 * 1000);
 
 // Global Error Handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {

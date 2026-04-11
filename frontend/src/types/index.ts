@@ -2,7 +2,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'ADMIN' | 'MANAGER' | 'EMPLOYEE' | 'VIEWER';
+  role: 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'HR_MANAGER' | 'IT_MANAGER' | 'TEAM_LEAD' | 'EMPLOYEE' | 'GUEST';
   organizationId: string;
 }
 
@@ -33,6 +33,11 @@ export interface Document {
     id: string;
     name: string;
   };
+
+  // Expiry & Retention
+  expiryDate?: string;
+  retentionDays?: number;
+  autoArchive?: boolean;
 }
 
 export interface WorkflowInstance {

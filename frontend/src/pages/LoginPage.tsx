@@ -36,9 +36,8 @@ export const LoginPage = () => {
         organizationId: decoded.organizationId,
         name: decoded.email.split('@')[0]
       };
-
       dispatch(loginSuccess({ token: accessToken, user }));
-      navigate(`/dashboard/${user.role.toLowerCase()}`);
+      navigate(`/`);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid credentials');
     } finally {

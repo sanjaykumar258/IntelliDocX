@@ -8,25 +8,39 @@ export const createVersion = async (
   fileHash: string,
   uploadedById: string
 ) => {
-  // 1. Blockchain Registration
-  let txHash: string | null = null;
-  if (versionNumber === 1) {
-    txHash = await blockchainService.registerDocumentHash(documentId, fileHash, uploadedById);
-  } else {
-    txHash = await blockchainService.updateDocumentHash(documentId, fileHash, uploadedById);
-  }
-
-  // 2. Create the version record
+  // 1. Create the version record first in DB
   const version = await prisma.documentVersion.create({
     data: {
       documentId,
       versionNumber,
       storagePath,
       fileHash,
-      blockchainTxHash: txHash || undefined, // Store tx hash if successful
       uploadedById,
     },
   });
+
+  // 2. Blockchain Registration (Attempt in background or with short timeout)
+  // We do not await this to prevent blocking the upload flow if blockchain is slow/down
+  (async () => {
+    try {
+      let txHash: string | null = null;
+      if (versionNumber === 1) {
+        txHash = await blockchainService.registerDocumentHash(documentId, fileHash, uploadedById);
+      } else {
+        txHash = await blockchainService.updateDocumentHash(documentId, fileHash, uploadedById);
+      }
+
+      if (txHash) {
+        await prisma.documentVersion.update({
+          where: { id: version.id },
+          data: { blockchainTxHash: txHash }
+        });
+        console.log(`[Blockchain] Successfully registered version ${versionNumber} for document ${documentId}`);
+      }
+    } catch (error) {
+      console.error(`[Blockchain] Failed to register version ${versionNumber} for document ${documentId}:`, error);
+    }
+  })();
 
   // 3. Update document current version and timestamp
   await prisma.document.update({

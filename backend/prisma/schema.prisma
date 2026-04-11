@@ -31,10 +31,14 @@ model Organization {
 }
 
 enum Role {
+  SUPER_ADMIN
   ADMIN
   MANAGER
+  HR_MANAGER
+  IT_MANAGER
+  TEAM_LEAD
   EMPLOYEE
-  VIEWER
+  GUEST
 }
 
 enum UserStatus {
@@ -47,7 +51,7 @@ model User {
   name             String
   email            String            @unique
   passwordHash     String
-  role             Role              @default(VIEWER)
+  role             Role              @default(EMPLOYEE)
   status           UserStatus        @default(ACTIVE)
   organizationId   String
   organization     Organization      @relation(fields: [organizationId], references: [id])
@@ -69,6 +73,21 @@ model User {
   resolvedApprovals  ActionApproval[]   @relation("ApprovalResolver")
   permissions        PermissionGrant[]
   grantedPermissions PermissionGrant[]  @relation("PermissionGranter")
+  // Document collaboration
+  comments           DocumentComment[]
+  createdShares      DocumentShare[]    @relation("ShareCreator")
+  notificationPrefs  UserNotificationPreference?
+  // IT Ticketing relations
+  submittedTickets   Ticket[]           @relation("TicketSubmitter")
+  assignedTickets    Ticket[]           @relation("TicketAssignee")
+  ticketMessages     TicketMessage[]
+  ticketAttachments  TicketAttachment[]
+  // HR relations
+  hrEmployee         HrEmployee?        @relation("HrUserProfile")
+  managedEmployees   HrEmployee[]       @relation("HrManager")
+  hrDocsSigned       HrDocument[]       @relation("HrDocSigner")
+  announcements      Announcement[]
+  approvedLeaves     LeaveRequest[]     @relation("LeaveApprover")
 
   @@index([organizationId])
   @@index([email])
@@ -108,16 +127,25 @@ model Document {
   metadata       DocumentMetadata?
   auditLogs      AuditLog[]
   workflowInstances WorkflowInstance[]
+  comments       DocumentComment[]
+  shares         DocumentShare[]
+  hrDocuments    HrDocument[]
 
   // Classification Fields
   extractedText  String?           @db.Text
   category       String?
   confidence     Float?
 
+  // Expiry & Retention
+  expiryDate     DateTime?
+  retentionDays  Int?
+  autoArchive    Boolean           @default(false)
+
   @@index([ownerId])
   @@index([organizationId])
   @@index([status])
   @@index([category])
+  @@index([expiryDate])
 }
 
 model DocumentVersion {
@@ -487,3 +515,254 @@ model PermissionGrant {
   @@index([documentId])
   @@index([organizationId])
 }
+
+// ===== Document Comments (Threaded) =====
+
+model DocumentComment {
+  id              String            @id @default(uuid())
+  documentId      String
+  document        Document          @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User              @relation(fields: [userId], references: [id])
+  parentCommentId String?
+  parentComment   DocumentComment?  @relation("CommentThread", fields: [parentCommentId], references: [id])
+  replies         DocumentComment[] @relation("CommentThread")
+  text            String
+  createdAt       DateTime          @default(now())
+
+  @@index([documentId])
+  @@index([userId])
+  @@index([parentCommentId])
+}
+
+// ===== Document Sharing =====
+
+model DocumentShare {
+  id              String   @id @default(uuid())
+  documentId      String
+  document        Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  token           String   @unique
+  permissions     String   @default("VIEW") // VIEW or DOWNLOAD
+  expiresAt       DateTime?
+  createdById     String
+  createdBy       User     @relation("ShareCreator", fields: [createdById], references: [id])
+  sharedWithEmail String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@index([token])
+  @@index([documentId])
+}
+
+// ===== User Notification Preferences =====
+
+model UserNotificationPreference {
+  id                    String  @id @default(uuid())
+  userId                String  @unique
+  user                  User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailOnApproval       Boolean @default(true)
+  emailOnRejection      Boolean @default(true)
+  emailOnComment        Boolean @default(true)
+  emailOnShare          Boolean @default(true)
+  emailOnExpiry         Boolean @default(true)
+  inAppOnApproval       Boolean @default(true)
+  inAppOnRejection      Boolean @default(true)
+  inAppOnComment        Boolean @default(true)
+  inAppOnShare          Boolean @default(true)
+  inAppOnExpiry         Boolean @default(true)
+}
+
+// ===== IT Help Desk - Ticketing System =====
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model Ticket {
+  id             String           @id @default(uuid())
+  ticketNumber   String           @unique
+  title          String
+  description    String           @db.Text
+  category       String?          // Login/Auth, OCR/Upload, Search/NLP, Versioning, Notifications, Access/Permission, Other
+  priority       TicketPriority   @default(MEDIUM)
+  status         TicketStatus     @default(OPEN)
+  submittedById  String
+  submittedBy    User             @relation("TicketSubmitter", fields: [submittedById], references: [id])
+  assignedToId   String?
+  assignedTo     User?            @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  organizationId String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  resolvedAt     DateTime?
+  messages       TicketMessage[]
+  attachments    TicketAttachment[]
+
+  @@index([organizationId])
+  @@index([status])
+  @@index([priority])
+  @@index([submittedById])
+  @@index([assignedToId])
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User     @relation(fields: [senderId], references: [id])
+  message    String   @db.Text
+  isInternal Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+model TicketAttachment {
+  id         String   @id @default(uuid())
+  ticketId   String
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  filePath   String
+  fileName   String?
+  uploadedById String
+  uploadedBy User     @relation(fields: [uploadedById], references: [id])
+  createdAt  DateTime @default(now())
+
+  @@index([ticketId])
+}
+
+// ===== HR Management Module =====
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACTOR
+  INTERN
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ON_LEAVE
+  RESIGNED
+  TERMINATED
+}
+
+model HrEmployee {
+  id               String          @id @default(uuid())
+  userId           String          @unique
+  user             User            @relation("HrUserProfile", fields: [userId], references: [id])
+  employeeCode     String          @unique
+  department       String?
+  designation      String?
+  dateJoined       DateTime?
+  employmentType   EmploymentType  @default(FULL_TIME)
+  status           EmployeeStatus  @default(ACTIVE)
+  managerId        String?
+  manager          User?           @relation("HrManager", fields: [managerId], references: [id])
+  emergencyContact Json?
+  organizationId   String
+  createdAt        DateTime        @default(now())
+  hrDocuments      HrDocument[]
+  onboardingTasks  OnboardingChecklist[]
+  leaveRequests    LeaveRequest[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model HrDocument {
+  id                String    @id @default(uuid())
+  documentId        String?
+  document          Document? @relation(fields: [documentId], references: [id])
+  hrDocType         String    // offer_letter, contract, nda, policy, handbook, performance_review, leave_form, other
+  employeeId        String?
+  employee          HrEmployee? @relation(fields: [employeeId], references: [id])
+  requiresSignature Boolean   @default(false)
+  signedAt          DateTime?
+  signedById        String?
+  signedBy          User?     @relation("HrDocSigner", fields: [signedById], references: [id])
+  visibleTo         String    @default("employee") // employee, all, hr_only
+  organizationId    String
+  createdAt         DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([employeeId])
+  @@index([hrDocType])
+}
+
+model OnboardingChecklist {
+  id             String    @id @default(uuid())
+  employeeId     String
+  employee       HrEmployee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taskName       String
+  taskType       String    // document, it_setup, training, access
+  status         String    @default("pending") // pending, in_progress, done
+  dueDate        DateTime?
+  assignedToRole String?   // HR, IT_MANAGER, MANAGER
+  completedAt    DateTime?
+  organizationId String
+  createdAt      DateTime  @default(now())
+
+  @@index([employeeId])
+  @@index([organizationId])
+}
+
+model Announcement {
+  id           String    @id @default(uuid())
+  title        String
+  body         String    @db.Text
+  createdById  String
+  createdBy    User      @relation(fields: [createdById], references: [id])
+  visibleTo    String    @default("all") // all, employees_only, managers_only
+  publishedAt  DateTime  @default(now())
+  expiresAt    DateTime?
+  organizationId String
+  createdAt    DateTime  @default(now())
+
+  @@index([organizationId])
+  @@index([publishedAt])
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  EMERGENCY
+  UNPAID
+  MATERNITY
+  PATERNITY
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model LeaveRequest {
+  id           String       @id @default(uuid())
+  employeeId   String
+  employee     HrEmployee   @relation(fields: [employeeId], references: [id])
+  leaveType    LeaveType
+  fromDate     DateTime
+  toDate       DateTime
+  reason       String?      @db.Text
+  status       LeaveStatus  @default(PENDING)
+  approvedById String?
+  approvedBy   User?        @relation("LeaveApprover", fields: [approvedById], references: [id])
+  organizationId String
+  createdAt    DateTime     @default(now())
+
+  @@index([employeeId])
+  @@index([organizationId])
+  @@index([status])
+}
+

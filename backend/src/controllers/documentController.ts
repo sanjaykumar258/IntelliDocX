@@ -17,160 +17,121 @@ import { io } from '../app';
 
 export const uploadDocument = async (req: AuthRequest, res: Response) => {
   try {
-    const file = req.file;
-    console.log('[Upload Debug] Incoming file:', file ? {
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: file.size
-    } : 'No file');
-    console.log('[Upload Debug] Incoming body:', req.body);
-
-    const { title, description, department, category, tags } = req.body;
+    const files = req.files as Express.Multer.File[];
     const user = req.user;
-
-    // Validate file
-    if (!file) return res.status(400).json({ message: 'No file uploaded' });
-
-    const validation = validateFile(file as Express.Multer.File);
-    console.log('[Upload Debug] Validation result:', validation);
-
-    if (!validation.isValid) {
-      return res.status(400).json({ message: validation.error });
+    
+    if (!files || files.length === 0) {
+      console.warn('[Upload] No files in request. req.files:', req.files);
+      return res.status(400).json({ message: 'No files uploaded' });
     }
 
-    if (!validation.isValid) {
-      return res.status(400).json({ message: validation.error });
-    }
+    console.log(`[Upload] User ${user.userId} (${user.organizationId}) is uploading ${files.length} files.`);
+    const results = [];
 
-    console.log('[Upload Debug] File buffer size:', file.buffer.length);
+    for (const file of files) {
+      console.log(`[Upload] Processing file: ${file.originalname} (${file.size} bytes)`);
+      const { title, description, department, category, tags } = req.body;
 
-    let fileHash = '';
-    let objectName = '';
-    let extractedText = '';
-    let classification = { category: 'OTHER', confidence: 0 };
-
-    console.log('[Upload Debug] Calculating hash...');
-    try {
-      fileHash = calculateFileHash(file.buffer);
-      console.log('[Upload Debug] Hash calculated:', fileHash);
-      objectName = `${user.organizationId}/${uuidv4()}-${file.originalname}`;
-
-      console.log('[Upload Debug] Uploading to MinIO...', objectName);
-      // Upload to MinIO
-      await uploadFileStream(objectName, file.buffer, file.size, {
-        'Content-Type': file.mimetype,
-        'x-amz-meta-original-name': file.originalname,
-      });
-      console.log('[Upload Debug] MinIO upload complete');
-    } catch (err) {
-      console.error('[Upload Debug] Critical error in upload flow:', err);
-      throw err;
-    }
-
-    // AI Classification will be handled by the background worker via aiClientService
-    console.log('[Upload Debug] AI processing queued for background worker');
-
-    // try {
-    //   ... (commented out text extraction)
-    // } catch (e) { ... }
-
-    // Create Document in DB
-    console.log('[Upload Debug] Creating DB record...');
-    const doc = await documentService.createDocument({
-      title: title || file.originalname,
-      description,
-      fileName: file.originalname,
-      mimeType: file.mimetype,
-      fileSize: file.size || file.buffer.length, // Ensure actual size is captured
-      ownerId: user.userId,
-      organizationId: user.organizationId,
-      extractedText: extractedText || undefined,
-      category: classification.category,
-      confidence: classification.confidence
-    }, objectName);
-
-    // Create Metadata
-    if (department || category || tags || classification.category) {
-      await documentService.createMetadata(doc.id, {
-        department,
-        category: category || classification.category, // Use auto-classified if not provided
-        tags: tags ? (Array.isArray(tags) ? tags : [tags]) : [],
-      });
-    }
-
-    // BUG 2 — Auto-trigger Workflow (Step 3) - COMPLETELY UPDATED
-    try {
-      // Find active workflow template for this org
-      const template = await prisma.workflowTemplate.findFirst({
-        where: { 
-          organizationId: user.organizationId,
-          isActive: true 
-        },
-        include: { 
-          steps: { orderBy: { order: 'asc' } },
-          slaConfig: true
-        }
-      });
-      
-      if (template) {
-        const slaHours = template.slaConfig?.maxApprovalHours || template.slaHours || 48;
-        await prisma.workflowInstance.create({
-          data: {
-            documentId: doc.id,
-            templateId: template.id,
-            organizationId: user.organizationId,
-            status: WorkflowStatus.PENDING,
-            currentStepIndex: 0,
-            startedById: user.userId,
-            dueDate: new Date(Date.now() + slaHours * 60 * 60 * 1000)
-          }
-        });
-        console.log('[Workflow] Auto-triggered for document:', doc.id);
+      // Validate file
+      const validation = validateFile(file);
+      if (!validation.isValid) {
+        console.error(`[Upload] Validation failed for ${file.originalname}: ${validation.error}`);
+        results.push({ fileName: file.originalname, status: 'error', error: validation.error });
+        continue;
       }
-    } catch (workflowError) {
-      console.error('[Workflow] Trigger failed:', workflowError);
-      // Don't fail the upload if workflow trigger fails
+
+      try {
+        console.log(`[Upload] Calculating hash for ${file.originalname}...`);
+        const fileHash = calculateFileHash(file.buffer);
+        const objectName = `${user.organizationId}/${uuidv4()}-${file.originalname}`;
+
+        console.log(`[Upload] Uploading to Storage: ${objectName}`);
+        await uploadFileStream(objectName, file.buffer, file.size, {
+          'Content-Type': file.mimetype,
+          'x-amz-meta-original-name': file.originalname,
+        });
+
+        console.log(`[Upload] Creating DB record for ${file.originalname}...`);
+        const doc = await documentService.createDocument({
+          title: title || file.originalname,
+          description,
+          fileName: file.originalname,
+          mimeType: file.mimetype,
+          fileSize: file.size || file.buffer.length,
+          ownerId: user.userId,
+          organizationId: user.organizationId,
+          category: 'OTHER',
+          confidence: 0
+        }, objectName);
+
+        if (department || category || tags) {
+          await documentService.createMetadata(doc.id, {
+            department,
+            category: category || 'OTHER',
+            tags: tags ? (Array.isArray(tags) ? tags : [tags]) : [],
+          });
+        }
+
+        // Auto-trigger Workflow
+        try {
+          const template = await prisma.workflowTemplate.findFirst({
+            where: { organizationId: user.organizationId, isActive: true },
+            include: { slaConfig: true }
+          });
+          
+          if (template) {
+            const slaHours = template.slaConfig?.maxApprovalHours || 48;
+            await prisma.workflowInstance.create({
+              data: {
+                documentId: doc.id,
+                templateId: template.id,
+                organizationId: user.organizationId,
+                status: WorkflowStatus.PENDING,
+                currentStepIndex: 1,
+                startedById: user.userId,
+                dueDate: new Date(Date.now() + slaHours * 60 * 60 * 1000)
+              }
+            });
+          }
+        } catch (wfErr) {
+          console.error(`[Upload] Workflow trigger failed (non-blocking) for ${doc.id}:`, wfErr);
+        }
+
+        console.log(`[Upload] Creating version record for ${file.originalname}...`);
+        await versionService.createVersion(doc.id, 1, objectName, fileHash, user.userId);
+
+        console.log(`[Upload] Accessing Audit Service...`);
+        await auditService.logAction(AuditAction.UPLOAD, user.userId, user.organizationId, doc.id, req.ip);
+
+        try {
+          await addDocumentJob(doc.id, objectName, user.organizationId, title || file.originalname, file.originalname);
+        } catch (queueErr) {
+          console.error(`[Upload] Queueing failed (non-blocking) for ${doc.id}:`, queueErr);
+        }
+
+        io.to(`org:${user.organizationId}`).emit('document:uploaded', {
+          documentId: doc.id,
+          name: doc.title,
+          uploadedBy: user.name || user.email || 'Unknown User'
+        });
+
+        results.push({ id: doc.id, fileName: file.originalname, status: 'success' });
+        console.log(`[Upload] ✅ Successfully processed ${file.originalname}`);
+
+      } catch (err) {
+        console.error(`[Upload] ❌ Failed to process ${file.originalname}:`, err);
+        results.push({ fileName: file.originalname, status: 'error', error: (err as any).message });
+      }
     }
 
-    // Note: Automatic Workflow Trigger will be moved to after AI processing in the worker 
-    // to ensure it triggers based on accurate classification.
-
-    // Create Version 1 (This handles Blockchain Registration)
-    const version = await versionService.createVersion(
-      doc.id,
-      1,
-      objectName,
-      fileHash,
-      user.userId
-    );
-
-    // Audit Log
-    await auditService.logAction(
-      AuditAction.UPLOAD,
-      user.userId,
-      user.organizationId,
-      doc.id,
-      req.ip
-    );
-
-    // Queue for AI Processing
-    try {
-      await addDocumentJob(doc.id, objectName, user.organizationId, title || file.originalname, file.originalname);
-    } catch (e) {
-      console.error('Failed to add document to queue', e);
-      // Don't fail the upload if queue fails, but maybe log it
-    }
-
-    // Emit Real-Time Event
-    io.to(`org:${user.organizationId}`).emit('document:uploaded', {
-      documentId: doc.id,
-      name: doc.title,
-      uploadedBy: user.name || user.email || 'Unknown User'
+    res.status(201).json({ 
+      message: `Processed ${files.length} files`, 
+      results,
+      successCount: results.filter(r => r.status === 'success').length,
+      errorCount: results.filter(r => r.status === 'error').length
     });
-
-    res.status(201).json({ ...doc, fileHash, blockchainTx: version.blockchainTxHash });
   } catch (error: any) {
-    console.error(error);
+    console.error('[Upload] Fatal error in uploadDocument:', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -382,8 +343,8 @@ export const deleteDocument = async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ message: 'Forbidden: You can only delete your own documents' });
     }
 
-    // Admins and Managers can delete directly, others go through approval
-    if (user.role === 'ADMIN' || user.role === 'MANAGER') {
+    // Admins, Managers, and the Document Owner can delete directly, others go through approval
+    if (user.role === 'ADMIN' || user.role === 'MANAGER' || doc.ownerId === user.userId) {
       // 1. Delete from MinIO first if storage path is available
       try {
         const latestVersion = await prisma.documentVersion.findFirst({
@@ -410,11 +371,23 @@ export const deleteDocument = async (req: AuthRequest, res: Response) => {
       // Note: Relation constraints might require multi-step delete or CASCADE.
       // We'll perform a soft delete first then hard delete if needed, 
       // but the user's prompt "both must be deleted" implies hard delete.
-      await prisma.$transaction([
-        prisma.documentMetadata.deleteMany({ where: { documentId: id } }),
-        prisma.documentVersion.deleteMany({ where: { documentId: id } }),
-        prisma.document.delete({ where: { id } })
-      ]);
+      await prisma.$transaction(async (tx) => {
+        // Clear references that don't have Cascade delete
+        await tx.auditLog.updateMany({
+          where: { documentId: id },
+          data: { documentId: null }
+        });
+        await tx.workflowInstance.deleteMany({ where: { documentId: id } });
+        
+        // Delete related child models
+        await tx.documentMetadata.deleteMany({ where: { documentId: id } });
+        await tx.documentVersion.deleteMany({ where: { documentId: id } });
+        await tx.documentShare.deleteMany({ where: { documentId: id } });
+        await tx.documentComment.deleteMany({ where: { documentId: id } });
+        
+        // Finally hard delete the document
+        await tx.document.delete({ where: { id } });
+      });
 
       // Audit Log
       await auditService.logAction(
@@ -425,6 +398,17 @@ export const deleteDocument = async (req: AuthRequest, res: Response) => {
         req.ip
       );
 
+      // Invalidate Redis cache so stale document list is not served
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const rc: any = require('../utils/redis').default;
+        if (rc && rc.isOpen) {
+          const pattern = `docs:list:${user.organizationId}:*`;
+          const keys = await rc.keys(pattern);
+          if (keys.length > 0) await rc.del(keys);
+        }
+      } catch (_) { /* non-critical */ }
+
       // Emit Real-Time Event
       io.to(`org:${user.organizationId}`).emit('document:deleted', {
         documentId: id
@@ -434,23 +418,31 @@ export const deleteDocument = async (req: AuthRequest, res: Response) => {
     }
 
     // Non-admin users: create approval request
-    const { requestApproval } = await import('../services/approvalService');
-    const approval = await requestApproval({
-      actionType: 'DELETE_DOCUMENT',
-      entityType: 'DOCUMENT',
-      entityId: id,
-      requestedById: user.userId,
-      organizationId: user.organizationId,
-      reason: req.body.reason || 'Document deletion requested',
-      metadata: { documentTitle: doc.title, fileName: doc.fileName },
-    });
+    try {
+      const { requestApproval } = await import('../services/approvalService');
+      const approval = await requestApproval({
+        actionType: 'DELETE_DOCUMENT',
+        entityType: 'DOCUMENT',
+        entityId: id,
+        requestedById: user.userId,
+        organizationId: user.organizationId,
+        reason: req.body.reason || 'Document deletion requested',
+        metadata: { documentTitle: doc.title, fileName: doc.fileName },
+      });
 
-    res.status(202).json({ 
-      message: 'Deletion request submitted for approval',
-      approvalId: approval.id,
-      status: 'PENDING_APPROVAL'
-    });
+      return res.status(202).json({ 
+        message: 'Deletion request submitted for approval',
+        approvalId: approval.id,
+        status: 'PENDING_APPROVAL'
+      });
+    } catch (approvalErr: any) {
+      if (approvalErr.message && approvalErr.message.includes('already exists')) {
+        return res.status(409).json({ message: 'Deletion already pending' });
+      }
+      throw approvalErr;
+    }
   } catch (error: any) {
+    console.error('[DELETE_500]', error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -679,5 +671,162 @@ export const chatWithDocument = async (req: AuthRequest, res: Response) => {
   } catch (error: any) {
     console.error('AI Chat Controller Error:', error);
     res.status(500).json({ message: 'Failed to process AI chat request' });
+  }
+};
+
+// ===== Feature 9: Document Expiry =====
+export const setExpiry = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { expiryDate, retentionDays, autoArchive } = req.body;
+    const user = req.user;
+
+    const doc = await documentService.getDocumentById(id, user.organizationId);
+    if (!doc) return res.status(404).json({ message: 'Document not found' });
+
+    const updated = await prisma.document.update({
+      where: { id },
+      data: {
+        expiryDate: expiryDate ? new Date(expiryDate) : null,
+        retentionDays: retentionDays || null,
+        autoArchive: autoArchive ?? false,
+      },
+    });
+
+    res.json({ message: 'Expiry settings updated', document: updated });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ===== Feature 10: Comments =====
+export const getComments = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const comments = await prisma.documentComment.findMany({
+      where: { documentId: id, parentCommentId: null },
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } },
+        replies: {
+          include: {
+            user: { select: { id: true, name: true, email: true, role: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(comments);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const addComment = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { text, parentCommentId } = req.body;
+    const user = req.user;
+
+    if (!text?.trim()) return res.status(400).json({ message: 'Comment text is required' });
+
+    const comment = await prisma.documentComment.create({
+      data: {
+        documentId: id,
+        userId: user.userId,
+        text: text.trim(),
+        parentCommentId: parentCommentId || null,
+      },
+      include: {
+        user: { select: { id: true, name: true, email: true, role: true } },
+      },
+    });
+
+    // Notify document owner
+    try {
+      const doc = await prisma.document.findUnique({ where: { id }, select: { ownerId: true, title: true } });
+      if (doc && doc.ownerId !== user.userId) {
+        await prisma.notification.create({
+          data: {
+            userId: doc.ownerId,
+            organizationId: user.organizationId,
+            type: 'DOCUMENT',
+            title: 'New Comment',
+            message: `${user.name || user.email} commented on "${doc.title}"`,
+          },
+        });
+        io.to(`org:${user.organizationId}`).emit('notification:new', { userId: doc.ownerId });
+      }
+    } catch (e) { /* non-critical */ }
+
+    res.status(201).json(comment);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ===== Feature 10: Sharing =====
+export const createShareLink = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { permissions, expiresInHours, sharedWithEmail } = req.body;
+    const user = req.user;
+
+    const doc = await documentService.getDocumentById(id, user.organizationId);
+    if (!doc) return res.status(404).json({ message: 'Document not found' });
+
+    const crypto = await import('crypto');
+    const token = crypto.randomBytes(32).toString('hex');
+
+    const share = await prisma.documentShare.create({
+      data: {
+        documentId: id,
+        token,
+        permissions: permissions || 'VIEW',
+        expiresAt: expiresInHours ? new Date(Date.now() + expiresInHours * 60 * 60 * 1000) : null,
+        createdById: user.userId,
+        sharedWithEmail: sharedWithEmail || null,
+      },
+    });
+
+    const shareUrl = `${req.protocol}://${req.get('host')}/api/share/${token}`;
+
+    // Notify shared user if email provided
+    if (sharedWithEmail) {
+      try {
+        const sharedUser = await prisma.user.findUnique({ where: { email: sharedWithEmail } });
+        if (sharedUser) {
+          await prisma.notification.create({
+            data: {
+              userId: sharedUser.id,
+              organizationId: user.organizationId,
+              type: 'DOCUMENT',
+              title: 'Document Shared With You',
+              message: `${user.name || user.email} shared "${doc.title}" with you`,
+            },
+          });
+        }
+      } catch (e) { /* non-critical */ }
+    }
+
+    res.status(201).json({ ...share, shareUrl });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getShares = async (req: AuthRequest, res: Response) => {
+  try {
+    const { id } = req.params;
+    const shares = await prisma.documentShare.findMany({
+      where: { documentId: id, isActive: true },
+      include: {
+        createdBy: { select: { id: true, name: true, email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json(shares);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
   }
 };

@@ -7,16 +7,7 @@ const CACHE_TTL = 300; // 5 minutes
 export class AnalyticsService {
 
     private async getOrSetCache<T>(key: string, fetchFn: () => Promise<T>): Promise<T> {
-        if (!redisClient.isOpen) return await fetchFn();
-
-        const cached = await redisClient.get(key);
-        if (cached) {
-            return JSON.parse(cached);
-        }
-
-        const data = await fetchFn();
-        await redisClient.setEx(key, CACHE_TTL, JSON.stringify(data));
-        return data;
+        return await fetchFn();
     }
 
     async getDocumentMetrics(organizationId: string) {

@@ -5,16 +5,21 @@ export const extractText = async (buffer: Buffer, mimeType: string): Promise<str
         Logger.info(`[TextExtractor] Extracting text for mime: ${mimeType}`);
 
         if (mimeType === 'application/pdf') {
-            console.log('[TextExtractor] Requiring pdf-parse...');
-            const pdf = require('pdf-parse');
-            console.log('[TextExtractor] Parsing PDF...');
-            const data = await pdf(buffer);
-            return normalizeText(data.text);
+            Logger.info('[TextExtractor] Using pdf-parse v2 (PDFParse class)...');
+            const { PDFParse } = require('pdf-parse');
+            // pdf-parse v2 requires Uint8Array, not Buffer
+            const uint8 = new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+            const parser = new PDFParse(uint8);
+            await parser.load();
+            const result = await parser.getText();
+            const text = typeof result === 'string' ? result : (result?.text || '');
+            Logger.info(`[TextExtractor] PDF text extracted: ${text.length} chars`);
+            parser.destroy();
+            return normalizeText(text);
         }
 
         if (mimeType.startsWith('image/')) {
             Logger.info('[TextExtractor] Loading Tesseract for image OCR...');
-            // Dynamic import to prevent crash if Tesseract fails to load in this environment
             const { createWorker } = await import('tesseract.js');
             const worker = await createWorker('eng');
             const { data: { text } } = await worker.recognize(buffer);
@@ -32,7 +37,6 @@ export const extractText = async (buffer: Buffer, mimeType: string): Promise<str
 
 const normalizeText = (text: string): string => {
     return text
-        .toLowerCase()
         .replace(/\s+/g, ' ') // Collapse whitespace
         .trim()
         .slice(0, 100000); // Limit length to prevent DB issues

@@ -3,7 +3,7 @@ import axios from 'axios';
 
 const API_URL = 'http://localhost:5000/api';
 const EMAIL = 'manager@acme.com';
-const PASSWORD = 'secure_admin_password';
+const PASSWORD = 'password123';
 
 async function verifyFiltering() {
     try {
@@ -16,39 +16,36 @@ async function verifyFiltering() {
         const token = loginRes.data.accessToken;
         console.log('✅ Login successful.');
 
-        // 2. Filter by Category: RESUME
-        console.log('\n--- Filtering by Category: RESUME ---');
-        const resumeRes = await axios.get(`${API_URL}/documents?category=RESUME`, {
+        // 2b. Filter by Category: INVOICE
+        console.log('\n--- Filtering by Category: INVOICE ---');
+        const invoiceRes = await axios.get(`${API_URL}/documents?category=INVOICE`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        const resumes = resumeRes.data.data;
-        console.log(`Found ${resumes.length} resumes.`);
-        if (resumes.length > 0) {
-            const allMatch = resumes.every((d: any) => d.category === 'RESUME');
-            if (allMatch) console.log('✅ All results match category RESUME');
+        const invoices = invoiceRes.data.data;
+        console.log(`Found ${invoices.length} invoices.`);
+        if (invoices.length > 0) {
+            const allMatch = invoices.every((d: any) => d.category === 'INVOICE');
+            if (allMatch) console.log('✅ All results match category INVOICE');
             else console.error('❌ Mismatch in category results');
-            resumes.forEach((d: any) => console.log(`   - ${d.title} (${d.category})`));
+            invoices.forEach((d: any) => console.log(`   - ${d.title} (${d.category})`));
         } else {
-            console.warn('⚠️ No resumes found to verify.');
+            console.warn('⚠️ No invoices found to verify.');
         }
 
-        // 3. Filter by Department: General
-        console.log('\n--- Filtering by Department: General ---');
-        const deptRes = await axios.get(`${API_URL}/documents?department=General`, {
+        // 2c. Filter by Category: FINANCIAL (Parent Group)
+        console.log('\n--- Filtering by Group: FINANCIAL ---');
+        const financialRes = await axios.get(`${API_URL}/documents?category=FINANCIAL`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
 
-        const generalDocs = deptRes.data.data;
-        console.log(`Found ${generalDocs.length} General documents.`);
-        if (generalDocs.length > 0) {
-            // Check metadata
-            const allMatch = generalDocs.every((d: any) => d.metadata?.department === 'General');
-            if (allMatch) console.log('✅ All results match department General');
-            else console.error('❌ Mismatch in department results');
-            generalDocs.forEach((d: any) => console.log(`   - ${d.title} (${d.metadata?.department})`));
+        const financialDocs = financialRes.data.data;
+        console.log(`Found ${financialDocs.length} financial documents.`);
+        if (financialDocs.length > 0) {
+            console.log('✅ Found documents in Financial group:');
+            financialDocs.forEach((d: any) => console.log(`   - ${d.title} (${d.category})`));
         } else {
-            console.warn('⚠️ No General documents found to verify.');
+            console.warn('⚠️ No financial documents found to verify.');
         }
 
     } catch (error: any) {

@@ -3,83 +3,124 @@ import multer from 'multer';
 import * as documentController from '../controllers/documentController';
 import { getAccessLogs, signDocument, getSignatures } from '../controllers/blockchainController';
 import { requireAuth } from '../middleware/auth';
-import { requireRole } from '../middleware/rbac';
+import { requireRole, requireMinRole } from '../middleware/rbac';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 router.use(requireAuth);
 
+// Upload — Employee+ (not Guests)
 router.post('/upload',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE']),
-  upload.single('file'),
+  requireMinRole('EMPLOYEE'),
+  upload.array('files'),
   documentController.uploadDocument
 );
 
+// Search — all authenticated
 router.get('/search',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  requireMinRole('GUEST'),
   documentController.searchDocuments
 );
 
+// List — all authenticated
 router.get('/',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  requireMinRole('GUEST'),
   documentController.getDocuments
 );
 
+// Bulk download — Employee+
 router.get('/download-all',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE']),
+  requireMinRole('EMPLOYEE'),
   documentController.downloadAllDocuments
 );
 
+// Get by ID — all authenticated
 router.get('/:id',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  requireMinRole('GUEST'),
   documentController.getDocumentById
 );
 
+// Update file — Employee+
 router.put('/:id/update',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE']),
+  requireMinRole('EMPLOYEE'),
   upload.single('file'),
   documentController.updateDocumentFile
 );
 
+// Rollback — Admin+
 router.post('/:id/rollback',
-  requireRole(['ADMIN', 'MANAGER']),
+  requireRole(['SUPER_ADMIN', 'ADMIN']),
   documentController.rollbackDocument
 );
 
+// Download — all authenticated
 router.get('/:id/download',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  requireMinRole('GUEST'),
   documentController.downloadDocument
 );
 
+// Delete — Employee+ (with approval flow for non-admins)
 router.delete('/:id',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE']),
+  requireMinRole('EMPLOYEE'),
   documentController.deleteDocument
 );
 
+// Versions — all authenticated
 router.get('/:id/versions',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  requireMinRole('GUEST'),
   documentController.getDocumentVersions
 );
 
+// Verify — all authenticated
 router.get('/:id/verify',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  requireMinRole('GUEST'),
   documentController.verifyDocument
 );
 
+// Audit certificate — Manager+
 router.get('/:id/audit',
-  requireRole(['ADMIN', 'MANAGER']),
+  requireMinRole('MANAGER'),
   documentController.getAuditCertificate
 );
 
+// AI Chat — Employee+
 router.post('/:id/chat',
-  requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']),
+  requireMinRole('EMPLOYEE'),
   documentController.chatWithDocument
 );
 
-// Blockain Security Extensions Phase 4
-router.get('/:id/blockchain/access-logs', requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']), getAccessLogs);
-router.post('/:id/blockchain/sign', requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE']), signDocument);
-router.get('/:id/blockchain/signatures', requireRole(['ADMIN', 'MANAGER', 'EMPLOYEE', 'VIEWER']), getSignatures);
+// Document Expiry
+router.post('/:id/set-expiry',
+  requireMinRole('MANAGER'),
+  documentController.setExpiry
+);
+
+// Comments
+router.get('/:id/comments',
+  requireMinRole('GUEST'),
+  documentController.getComments
+);
+
+router.post('/:id/comments',
+  requireMinRole('EMPLOYEE'),
+  documentController.addComment
+);
+
+// Sharing
+router.post('/:id/share',
+  requireMinRole('EMPLOYEE'),
+  documentController.createShareLink
+);
+
+router.get('/:id/shares',
+  requireMinRole('EMPLOYEE'),
+  documentController.getShares
+);
+
+// Blockchain Security
+router.get('/:id/blockchain/access-logs', requireMinRole('GUEST'), getAccessLogs);
+router.post('/:id/blockchain/sign', requireMinRole('EMPLOYEE'), signDocument);
+router.get('/:id/blockchain/signatures', requireMinRole('GUEST'), getSignatures);
 
 export default router;

@@ -128,7 +128,7 @@ export class AIClientService {
 
   async systemChat(organizationId: string, message: string, history: any[] = []) {
     try {
-      const response = await this.client.post('/chat/system', {
+      const response = await this.client.post('/ai/system-chat', {
         organizationId,
         message,
         history
