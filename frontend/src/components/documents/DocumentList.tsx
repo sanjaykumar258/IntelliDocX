@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { format } from 'date-fns';
-import { Download, Trash2, Eye, ShieldCheck, ShieldAlert, MessageSquare, FileText, ChevronRight } from 'lucide-react';
+import { Download, Trash2, Eye, ShieldCheck, ShieldAlert, MessageSquare, FileText, ChevronRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Document } from '@/types';
 import { Progress } from '@/components/ui/progress';
@@ -13,9 +13,12 @@ interface DocumentListProps {
   onDownload: (id: string) => void;
   onPreview: (id: string) => void;
   onChat: (id: string, title: string) => void;
+  selectedDocs?: Set<string>;
+  onToggleSelect?: (id: string) => void;
+  onSelectAll?: (all: boolean) => void;
 }
 
-export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownload, onPreview, onChat }: DocumentListProps) => {
+export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownload, onPreview, onChat, selectedDocs, onToggleSelect, onSelectAll }: DocumentListProps) => {
   if (loading) return null; // Handled by standard layout skeleton if needed
 
   const getFileIconColor = (type: string | undefined) => {
@@ -42,6 +45,21 @@ export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownloa
         <table className="w-full text-left text-sm whitespace-nowrap">
           <thead className="bg-slate-50/50 dark:bg-slate-950/50 text-slate-500 dark:text-slate-400 border-b border-slate-200/50 dark:border-slate-800/50">
             <tr>
+              <th className="px-6 py-4 font-semibold text-xs tracking-wider uppercase w-10">
+                {onSelectAll && (
+                  <button 
+                    type="button"
+                    onClick={() => onSelectAll(!(selectedDocs?.size === documents.length && documents.length > 0))}
+                    className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                      selectedDocs?.size === documents.length && documents.length > 0
+                        ? 'bg-indigo-600 border-indigo-600 text-white' 
+                        : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-600 text-transparent hover:border-indigo-400'
+                    }`}
+                  >
+                    <Check strokeWidth={4} className="w-3 h-3" />
+                  </button>
+                )}
+              </th>
               <th className="px-6 py-4 font-semibold text-xs tracking-wider uppercase">Document Name</th>
               <th className="px-6 py-4 font-semibold text-xs tracking-wider uppercase">Classification</th>
               <th className="px-6 py-4 font-semibold text-xs tracking-wider uppercase">Telemetry</th>
@@ -64,8 +82,23 @@ export const DocumentList = ({ documents, loading, onVerify, onDelete, onDownloa
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.2 } }}
-                  className="group transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/20 relative"
+                  className={`group transition-colors relative ${selectedDocs?.has(doc.id) ? 'bg-indigo-50/50 dark:bg-indigo-500/10' : 'hover:bg-slate-50 dark:hover:bg-slate-800/20'}`}
                 >
+                  <td className="px-6 py-4">
+                    {onToggleSelect && (
+                      <button 
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); onToggleSelect(doc.id); }}
+                        className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                          selectedDocs?.has(doc.id)
+                            ? 'bg-indigo-600 border-indigo-600 text-white' 
+                            : 'bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-transparent opacity-0 group-hover:opacity-100 hover:border-indigo-400'
+                        } ${selectedDocs?.has(doc.id) ? 'opacity-100' : ''}`}
+                      >
+                        <Check strokeWidth={4} className="w-3 h-3" />
+                      </button>
+                    )}
+                  </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-3">
                       <FileText className={`w-5 h-5 shrink-0 ${getFileIconColor(doc.mimeType)}`} />

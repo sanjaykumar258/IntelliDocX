@@ -8,59 +8,111 @@
 
 ---
 
-## ⚡ Key Core Pillars
-
-### 🧠 1. AI-Powered Intelligence
-*   **Auto-Classification:** Upload any document, and our Python-driven AI engine (FastAPI + NLP) automatically identifies if it's an **Invoice**, **Contract**, **HR Policy**, or **Legal Report**.
-*   **Intelligent Extraction:** Automatically extracts key metadata (Dates, Amounts, Parties) to eliminate manual entry.
-*   **Semantic Search:** Don't just search for keywords; search for *meanings*. Our vector-based search (Elasticsearch + Embeddings) understands context.
-*   **Compliance Guard:** Real-time AI checks to ensure documents meet organizational standards before they are even stored.
-
-### ⛓️ 2. Immutable Blockchain Notary
-*   **Proof of Integrity:** Every document upload, version change, and approval is "anchored" to a private Ethereum (Ganache) blockchain.
-*   **Tamper Detection:** Mathematical proof that a file hasn't been altered since its last notarization.
-*   **Digital Signatures:** Secure, on-chain logging of user identities and document interactions for a flawless audit trail.
-
-### 🌊 3. Dynamic Workflow Automation
-*   **Zero-Touch Triggers:** Uploading a document automatically triggers a tailored approval pipeline based on its category.
-*   **Multi-Step Approvals:** Seamless transition from **Employee → Manager → Admin** with real-time notifications.
-*   **SLA & Escalation:** Active monitoring of approval times with automatic escalation to admins if deadlines are breached.
-*   **Live Dashboard:** A premium, real-time visualization of all "Active Approvals" with interactive status tracking.
+## 🌟 The Core Vision
+Traditional DMS solutions are passive digital filing cabinets that are insecure and rely totally on human effort for categorization and routing. IntelliDocX fixes this by providing:
+- **AI-Driven Processing**: Automatically categorizes, tags, and makes content deeply searchable via vector embeddings.
+- **Tamper-Proof Archiving**: Uses a Ethereum blockchain architecture to create an immutable audit trail of document history.
+- **Automated Workflows**: Orchestrates complex approval workflows from simple uploads, equipped with SLA monitoring.
 
 ---
 
-## 🏗️ Technical Architecture
+## 🏗️ Technical Architecture & Stack
 
-IntelliDocX is built on a high-performance **Microservices-ready** architecture:
+IntelliDocX uses a state-of-the-art **Microservices-ready** architecture, ensuring maximum scalability and resilience.
 
-| Tier | Technology | Role |
-| :--- | :--- | :--- |
-| **Frontend** | React, TypeScript, Framer Motion | Premium Responsive UI & Interactive Dashboards |
-| **Backend** | Node.js, Express, Prisma ORM | API Gateway, RBAC, and Business Logic Orchestration |
-| **AI Engine** | Python, FastAPI, PyTorch | OCR, Categorization, and Vector Search |
-| **Ledger** | Solidity, Hardhat, Ganache | Immutable Evidence & Audit Recording |
-| **Storage** | MinIO (S3 Compatible) | Secure Object Storage with Versioning |
-| **Cache/Queue** | Redis, BullMQ | High-speed Caching & Background Processing |
-| **Database** | PostgreSQL | Relational Data Management |
+### Frontend Application
+* **Framework**: React 18, Vite.js, TypeScript.
+* **State Management**: Redux Toolkit (RTK) + React Query.
+* **Component Library**: Radix UI, Tailwind CSS, Framer Motion for dynamic animations.
+* **Styling**: Complete glassmorphism interface, light/dark mode dynamic switching, modern curated typography.
+* **Real-time**: Socket.IO client for live updates to documents and workflows without refresh.
+
+### Backend API Services
+* **Framework**: Node.js, Express.js (TypeScript).
+* **Database & ORM**: PostgreSQL paired with Prisma ORM.
+* **Security & Auth**: JWT (Access+Refresh Rotation), Two-Factor Authentication (2FA) via `speakeasy`, Helmet.js, rate limiting.
+* **Caching & Queueing**: Redis v4 (for caching high-read routes `docs:list:...`) and BullMQ for background task processing.
+* **Real-time Event Engine**: Socket.IO server pushing changes immediately to relevant tenant organizations.
+
+### AI Processing Engine
+* **Technology**: Python 3, FastAPI, PyTorch.
+* **Capabilities**: 
+  - PyTesseract (OCR) for extracting text.
+  - NLP model inference (Transformers) for document semantic categorization.
+  - Elasticsearch for high-speed indexing and vector-based meaning queries.
+  - Groq AI SDK for real-time document summarization and chat logic.
+
+### Distributed Ledger & Storage
+* **Blockchain Notary**: Solidity smart contracts, Hardhat, Ganache (Local Ethereum Node) to record immutable document hashes.
+* **File Storage**: MinIO (S3-compatible Object Storage), ensuring large physical files are kept securely off the database.
 
 ---
 
-## 🚀 Deployment & Setup
+## 👥 Comprehensive User Roles & Permissions (RBAC)
+
+IntelliDocX implements strict Level-Based Role-Based Access Control (RBAC) isolating duties effectively across the organization:
+
+1. **SUPER_ADMIN (Level 100)**: Ultimate system access. Can bypass all manual approvals, purge system vaults, setup organizational tenants, and manage admin users.
+2. **ADMIN (Level 90)**: Organizational administrators. Can access the Admin Dashboard, manage global users, configure document templates, and access system-wide Audit Logs.
+3. **MANAGER (Level 80)**: Department heads. Access to Manager Dashboard. Responsible for advancing Multi-Step approval workflows. Can enforce SLAs and view departmental analytics.
+4. **HR_MANAGER (Level 75)**: HR specialists who exclusively manage employee resumes, offer letters, payroll info, and onboarding compliance routes.
+5. **IT_MANAGER (Level 75)**: IT resolution team holding the queue for user-submitted IT Tickets and infrastructure monitoring.
+6. **TEAM_LEAD (Level 60)**: Operational team administrators holding early-stage workflow escalation duties.
+7. **EMPLOYEE (Level 40)**: Core staff users. Can upload personal files, check their document status on "My Approvals", download verified documents, and engage with AI for document chat.
+8. **GUEST (Level 10)**: Read-only external participants limited to viewing specifically shared files/links.
+
+---
+
+## ⚡ Major Features (End-to-End)
+
+### 🧠 Auto-Intelligence & Categorization
+Upload any document, and the Python-driven AI engine (FastAPI + Groq) automatically parses it. Whether it's an **Invoice**, **Contract**, **HR Policy**, or **Legal Report**, the AI detects it without manual input.
+
+### ⛓️ Immutable Blockchain Integrity Notary
+Every document uploaded and successfully verified is "anchored" onto the private Ethereum ledger. 
+- **Verifiable Integrity**: Calculate the current cryptographic hash of a document and compare it to the blockchain to instantly verify it has never been altered.
+- **Audit Trails**: A resilient logging system mapping document lifecycle changes onto immutable blocks.
+
+### 🌊 Dynamic Workflow Engine (SLAs & Escalations)
+Uploading a document sets off an automated approval pipeline.
+- Workflows dynamically adapt to transition through **Pending Review -> Under Review -> Approved**.
+- SLA Timers: If an approval sits past a defined timeframe, it is highlighted or escalated.
+
+### 💬 IntelliBot: AI Document Interrogation
+A smart AI chat system tied to individual documents. Instead of reading a 50-page contract, employees can ask "What are the termination conditions?" and receive a contextualized summary generated instantly.
+
+---
+
+## 🛠️ Minor & Quality of Life Features
+
+* **Real-time Semantic Searching**: Search for "financial results" and the system will locate "Q3 Revenue Report" because it understands meanings, not just exact strings.
+* **Redis Auto-Invalidation**: Whenever an item is hard-deleted, bulk-deleted, or withdrawn from the UI, the specific organization's Redis cache is immediately invalidated to prevent stale data ghosting.
+* **Two-Factor Authentication (2FA)**: Fully functional QR code generation and verification utilizing `speakeasy` for uncompromising account security.
+* **Zero-Touch Analytics**: Dashboards that populate multi-colored charts covering System Usage, SLA Compliance, and Storage Quotas immediately on login.
+* **Bulk Asset Purging**: Admins can wipe or mass-delete documents instantly across DB and MinIO with a single click.
+* **Blob-Based Local Downloads**: Viewing a document requests real-time blobs authorized by JWT Interceptors, allowing preview popups without messy physical downloads.
+* **IT Ticket Generation**: Native button capabilities to route an unresolved document issue instantly into an IT Ticket support queue without leaving the page.
+* **Optimistic UI Updates**: Using React best practices, the interface will remove documents immediately from the DOM while the async delete is being confirmed to ensure zero UI lag.
+* **Role-Based Redirects**: Smart session routing ensuring if an HR member logs in, they land directly on `/dashboard/hr` immediately.
+
+---
+
+## 🚀 Deployment & Local Setup
 
 ### 🐳 The Dockerized Way (Recommended)
-The entire ecosystem is containerized for instant deployment.
+The entire ecosystem spans across 6+ dependent services. Docker encapsulates this effortlessly.
 
 1.  **Clone & Configure:**
     ```bash
-    git clone https://github.com/sanjaykumar258/IntelliDocX.git
-    cd IntelliDocX
+    git clone https://github.com/sanjaykumar258/Final_project.git
+    cd Final_project
     cp .env.example .env
     ```
 2.  **Spin Up Infrastructure:**
     ```bash
     docker-compose up -d
     ```
-3.  **Prepare Database:**
+3.  **Prepare Database & Seed:**
     ```bash
     cd backend
     npx prisma migrate dev
@@ -68,34 +120,12 @@ The entire ecosystem is containerized for instant deployment.
     ```
 
 ### 🛠️ Manual Development Setup
-If you prefer running services individually:
-*   **Backend:** `cd backend && npm run dev` (Port 5000)
-*   **Frontend:** `cd frontend && npm run dev` (Port 5173)
-*   **AI Service:** `cd ai-service && uvicorn app.main:app --reload` (Port 8000)
+If you need hot-reloading across custom service adjustments:
+*   **Backend:** `cd backend && npm install && npm run dev` (Port 5000)
+*   **Frontend:** `cd frontend && npm install && npm run dev` (Port 5173)
+*   **AI Service:** `cd ai-service && pip install -r requirements.txt && uvicorn app.main:app --reload` (Port 8000)
+*   **Dependencies:** Postgres, Redis, MinIO, and Elasticsearch must be running.
 
 ---
 
-## 👤 User Roles & Access
-*   **Admin:** Complete control over organization, users, and global workflow templates.
-*   **Manager:** Can manage document categories, approve/reject workflows, and view department stats.
-*   **User:** Securely upload documents, track their own workflows, and interact with the IntelliBot.
-
----
-
-## 🤖 IntelliBot Chat
-Integrated directly into the dashboard, **IntelliBot** is your personal AI assistant. It can:
-- Summarize long documents in seconds.
-- Find specific clauses in contracts.
-- Check the status of your pending approvals using natural language.
-
----
-
-## 🛡️ Security & Compliance
-- **JWT Auth:** Secure session management with refresh token rotation.
-- **Helmet.js:** Enterprise-standard security headers.
-- **Rate Limiting:** Protection against brute-force and DDoS attacks.
-- **RBAC Middleware:** Strict enforcement of role-based permissions at the API level.
-
----
-
-*IntelliDocX is more than a DMS—it's the backbone of your digital trust and automated intelligence.*
+*IntelliDocX is more than a passive storage box—it's the smart, resilient backbone of digital trust and automated intelligence.*

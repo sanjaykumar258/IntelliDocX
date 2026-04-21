@@ -47,7 +47,7 @@ export class AIClientService {
       const response = await this.client.post('/ai/search', {
         query,
         organizationId,
-        limit: 20,
+        limit: 100,
         filters,
       });
 
@@ -68,13 +68,9 @@ export class AIClientService {
       });
 
       return response.data;
-    } catch (error) {
-      console.error('AI Chat Error:', error);
-      return {
-        answer: 'I encountered an error while trying to process your request. Please try again later.',
-        confidence: 0,
-        source_found: false
-      };
+    } catch (error: any) {
+      console.error('AI Chat Error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.detail || error.message || 'Failed to communicate with AI chat service');
     }
   }
 
@@ -134,13 +130,9 @@ export class AIClientService {
         history
       });
       return response.data;
-    } catch (error) {
-      console.error('AI System Chat Error:', error);
-      return {
-        answer: 'System assistant encountered an error while processing your request.',
-        confidence: 0,
-        source_found: false
-      };
+    } catch (error: any) {
+      console.error('AI System Chat Error:', error.response?.data || error.message);
+      throw new Error(error.response?.data?.detail || error.message || 'Failed to communicate with AI system chat service');
     }
   }
 }

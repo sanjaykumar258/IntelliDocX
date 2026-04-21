@@ -65,6 +65,11 @@ model User {
   loginHistory     LoginHistory[]
   savedSearches    SavedSearch[]
   searchHistory    SearchHistory[]
+  twoFactorSecret  String?
+  isTwoFactorEnabled Boolean @default(false)
+  avatarUrl        String?   @db.Text
+  theme            String    @default("system")
+  accentColor      String    @default("#6366f1")
   workflowLogs     WorkflowLog[]    @relation("UserWorkflowLogs")
   startedWorkflows WorkflowInstance[] @relation("WorkflowStarter")
   // Phase 1: Admin & Permission relations
@@ -373,6 +378,8 @@ model RefreshToken {
   revoked   Boolean  @default(false)
   createdAt DateTime @default(now())
   replacedByToken String?
+  deviceName String?
+  location   String?
   
   @@index([userId])
   @@index([token])

@@ -59,10 +59,19 @@ export const ApprovalTracker = ({ instance, onApprove, onReject, onEscalate }: A
       } else {
         await onReject(instance.id, comment);
       }
+      setActionState('IDLE');
+      setComment('');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  const ROLE_HIERARCHY: Record<string, number> = {
+    SUPER_ADMIN: 100, ADMIN: 90, MANAGER: 80, HR_MANAGER: 75, IT_MANAGER: 75, TEAM_LEAD: 60, EMPLOYEE: 40, GUEST: 10
+  };
+  const userLvl = ROLE_HIERARCHY[user?.role || ''] || 0;
+  const requiredLvl = ROLE_HIERARCHY[instance.currentRole] || 999;
+  const canApprove = userLvl >= requiredLvl;
 
   return (
     <motion.div 
@@ -130,9 +139,9 @@ export const ApprovalTracker = ({ instance, onApprove, onReject, onEscalate }: A
         </div>
 
         <AnimatePresence mode="wait">
-          {user?.role === 'EMPLOYEE' ? (
+          {user?.role === 'EMPLOYEE' || !canApprove ? (
             <div className="text-xs font-bold text-slate-400 italic px-4">
-              Awaiting Validation
+              Awaiting {instance.currentRole.replace('_', ' ')}
             </div>
           ) : actionState === 'IDLE' ? (
             <motion.div key="actions" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="flex gap-2">

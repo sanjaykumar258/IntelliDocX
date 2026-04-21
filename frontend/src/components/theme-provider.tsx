@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react"
+import { createContext, useContext, useEffect, useState, useMemo } from "react"
 
 type Theme = "dark" | "light" | "system"
 
@@ -23,7 +23,7 @@ const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 export function ThemeProvider({
   children,
   defaultTheme = "system",
-  storageKey = "vite-ui-theme",
+  storageKey = "intellidocx-theme",
   ...props
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(
@@ -32,29 +32,25 @@ export function ThemeProvider({
 
   useEffect(() => {
     const root = window.document.documentElement
+    
+    // Standard Tailwind 'class' strategy: just add/remove '.dark'
+    const isDark = theme === "dark" || 
+      (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
 
-    root.classList.remove("light", "dark")
-
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light"
-
-      root.classList.add(systemTheme)
-      return
+    if (isDark) {
+      root.classList.add("dark");
+    } else {
+      root.classList.remove("dark");
     }
-
-    root.classList.add(theme)
   }, [theme])
 
-  const value = {
+  const value = useMemo(() => ({
     theme,
-    setTheme: (theme: Theme) => {
-      localStorage.setItem(storageKey, theme)
-      setTheme(theme)
+    setTheme: (newTheme: Theme) => {
+      localStorage.setItem(storageKey, newTheme)
+      setTheme(newTheme)
     },
-  }
+  }), [theme, storageKey])
 
   return (
     <ThemeProviderContext.Provider value={value} {...props}>

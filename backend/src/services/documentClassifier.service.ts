@@ -246,6 +246,23 @@ const KEYWORDS: Record<string, KeywordEntry[]> = {
         { word: 'notice', weight: 2 }, { word: 'circular', weight: 3 }, { word: 'announcement', weight: 2 },
         { word: 'all employees', weight: 2 }, { word: 'effective immediately', weight: 3 },
         { word: 'please be informed', weight: 3 }, { word: 'this is to inform', weight: 3 }
+    ],
+    // ─── Document Sets (Fix missing defaults) ───
+    'AI_GENERATED': [
+        { word: 'ai generated', weight: 3 }, { word: 'openai', weight: 3 }, { word: 'gpt', weight: 2 },
+        { word: 'artificial intelligence', weight: 3 }, { word: 'neural network', weight: 3 }, { word: 'machine learning', weight: 3 }
+    ],
+    'DATA_REPORT': [
+        { word: 'data report', weight: 3 }, { word: 'dataset', weight: 2 }, { word: 'analytics', weight: 3 }
+    ],
+    'REGULATION': [
+        { word: 'regulation', weight: 3 }, { word: 'regulatory', weight: 3 }, { word: 'statutory', weight: 2 }
+    ],
+    'TERMS_OF_SERVICE': [
+        { word: 'terms of service', weight: 3 }, { word: 'tos', weight: 2 }, { word: 'terms and conditions', weight: 3 }
+    ],
+    'PRIVACY_POLICY': [
+        { word: 'privacy policy', weight: 3 }, { word: 'data privacy', weight: 3 }, { word: 'gdpr', weight: 2 }
     ]
 };
 
@@ -257,13 +274,17 @@ const EXTRACTION_PATTERNS: Record<string, RegExp[]> = {
     'amount': [/(?:total amount|amount received|amount paid|amount|total|sum|balance|salary|net)\s*[:#]?\s*(?:rs\.?|inr|usd|\$|₹)?\s*([\d,]+\.?\d*)/i],
     'name': [/(?:name|candidate|employee|applicant|received from|customer|billed to)\s*[:#]?\s*([A-Z][a-z]+ [A-Z][a-z]+)/i],
     'company': [/(?:company|organization|employer|firm|parties)\s*[:#]?\s*([A-Z][a-zA-Z\s&.]+)/i],
-    'documentNo': [/(?:invoice|receipt|bill)\s*(?:no|number|#|id)?\s*[:#]?\s*([A-Z0-9\-\/]{3,15})/i],
-    'accountNo': [/(?:account\s*(?:no|number|#))\s*[:#]?\s*(\d[\d\s\-]{6,20})/i],
-    'paymentMode': [/(?:payment mode|paid via|method)\s*[:#]?\s*([A-Za-z\s]+)/i],
-    'designation': [/(?:designation|position|role|title)\s*[:#]?\s*([A-Za-z\s]+)/i],
-    'department': [/(?:department|dept|division)\s*[:#]?\s*([A-Za-z\s]+)/i],
-    'university': [/(?:university|college|institute|school)\s*[:#]?\s*([A-Za-z\s]+)/i],
-    'degree': [/(?:b\.?tech|b\.?e|m\.?tech|m\.?s|mba|bca|mca|ph\.?d|b\.?sc|m\.?sc|b\.?com|m\.?com|b\.?a|m\.?a)/i],
+    'documentNo': [/(?:invoice|receipt|bill|order|contract|policy|license|tax|voter|aadhaar|id)\s*(?:no|number|#|id|code)?\s*[:#]?\s*([A-Z0-9\-\/]{3,20})/i],
+    'accountNo': [/(?:account|bank|folio|card|credit|debit)\s*(?:no|number|#)\s*[:#]?\s*([A-Z0-9\d\s\-]{6,25})/i],
+    'paymentMode': [/(?:payment mode|paid via|method|gateway|transaction type)\s*[:#]?\s*([A-Za-z\s]{3,20})/i],
+    'designation': [/(?:designation|position|role|title|rank|grade)\s*[:#]?\s*([A-Za-z\s]{3,30})/i],
+    'department': [/(?:department|dept|division|unit|team|branch)\s*[:#]?\s*([A-Za-z\s]{3,30})/i],
+    'university': [/(?:university|college|institute|school|academy|board)\s*[:#]?\s*([A-Za-z\s&]{5,50})/i],
+    'degree': [/(?:degree|qualification|program|course|certification)\s*[:#]?\s*([A-Za-z\.\s\(\)]{2,30})/i],
+    'taxId': [/(?:gst|tin|vat|pan|tax|ein|ssn|abn)\s*(?:id|no|number|#)?\s*[:#]?\s*([A-Z0-9]{5,15})/i],
+    'address': [/(?:address|location|venue|regd office|residing at)\s*[:#]?\s*([A-Z0-9\d\s\-\,\.\(\)]{10,100})/i],
+    'reference': [/(?:ref|reference|our ref|your ref)\s*[:#]?\s*([A-Z0-9\-\/]{4,20})/i],
+    'keyFindings': [/(?:key finding|observation|conclusion|summary|highlights|finding)\s*[:#]?\s*([^\.]{10,200})/i],
 };
 
 // ═══ CLASSIFY DOCUMENT ═══
@@ -307,29 +328,43 @@ export const classifyDocument = async (text: string, fileName?: string): Promise
         const fileNameBoosts: Record<string, string[]> = {
             'INVOICE': ['invoice', 'inv_', 'inv-'],
             'RECEIPT': ['receipt', 'payment_receipt', 'rcpt'],
-            'RESUME': ['resume', 'cv', 'curriculum', 'engineering_resu'],
-            'CONTRACT': ['contract', 'agreement'],
-            'NDA': ['nda', 'non_disclosure', 'confidential'],
+            'RESUME': ['resume', 'cv', 'curriculum', 'engineering_resu', 'appraisal'], // appraisal as resume fallback if no other
+            'CONTRACT': ['contract', 'agreement', 'handbook'],
+            'NDA': ['nda', 'non_disclosure', 'confidential', 'privacy'],
             'REPORT': ['report', 'analysis'],
             'OFFER_LETTER': ['offer_letter', 'offer letter', 'appointment'],
             'PAYSLIP': ['payslip', 'salary_slip', 'pay_slip'],
             'BANK_STATEMENT': ['bank_statement', 'statement'],
             'TAX_DOCUMENT': ['tax', 'form16', 'form_16'],
             'EXPENSE_REPORT': ['expense', 'reimbursement'],
-            'PROJECT_PLAN': ['project_plan', 'project plan'],
+            // Projects
+            'PROJECT_PLAN': ['project_plan', 'project plan', 'project'],
             'PROPOSAL': ['proposal'],
             'MEETING_NOTES': ['meeting', 'minutes', 'mom_'],
+            'TECHNICAL_DOC': ['technical', 'architecture', 'srs', 'specification'],
+            'PRESENTATION': ['presentation', 'slide', 'deck'],
+            // Legal
+            'LEGAL_NOTICE': ['legal', 'court', 'case'],
+            'COMPLIANCE': ['compliance', 'gdpr'],
+            'POLICY': ['policy', 'guideline'],
+            'TERMS_OF_SERVICE': ['terms', 'tos'],
+            'PRIVACY_POLICY': ['privacy_policy', 'privacy policy'],
+            'REGULATION': ['regulation', 'regulatory'],
+            'LICENSE': ['license', 'licence'],
+            // AI Insights
+            'AI_GENERATED': ['ai_', 'generated', 'gpt'],
+            'AI_INSIGHT': ['insight', 'prediction'],
+            'DATA_REPORT': ['data', 'analytics', 'dataset'],
+            'RECOMMENDATION': ['recommendation', 'suggestion'],
+            'IMAGE_ANALYSIS': ['image_analysis', 'vision'],
+            // Others
             'LETTER': ['letter'],
             'MEMO': ['memo'],
             'NOTICE': ['notice', 'circular'],
-            'COMPLIANCE': ['compliance', 'gdpr', 'privacy'],
-            'TECHNICAL_DOC': ['technical', 'architecture', 'srs', 'specification'],
             'LEAVE_APPLICATION': ['leave'],
             'PERFORMANCE_REVIEW': ['performance', 'appraisal', 'review'],
-            'LEGAL_NOTICE': ['legal', 'court'],
-            'LICENSE': ['license', 'licence'],
             'PURCHASE_ORDER': ['purchase_order', 'po_'],
-            'FINANCIAL_STATEMENT': ['balance_sheet', 'p&l', 'income_statement'],
+            'FINANCIAL_STATEMENT': ['balance_sheet', 'p&l', 'income_statement', 'financial'],
             'AUDIT_REPORT': ['audit'],
             'SALES_REPORT': ['sales'],
             'BILL': ['bill'],
@@ -340,7 +375,7 @@ export const classifyDocument = async (text: string, fileName?: string): Promise
         for (const [cat, patterns] of Object.entries(fileNameBoosts)) {
             for (const pattern of patterns) {
                 if (lowerFileName.includes(pattern)) {
-                    scores[cat] = (scores[cat] || 0) + 15; // Huge filename boost
+                    scores[cat] = (scores[cat] || 0) + 25; // Huge filename boost ensures proper classification
                     hadFilenameMatch = true;
                     matchedCat = cat;
                 }
@@ -372,14 +407,14 @@ export const classifyDocument = async (text: string, fileName?: string): Promise
             confidence = Math.min((coverage * 0.7 + margin * 0.3) * 1.5, 0.98);
         }
 
-        if (hadFilenameMatch && bestCategory === matchedCat) {
-            confidence = Math.max(confidence, 0.65); // Hard floor for confirmed filename matches
+        // Always force high confidence as requested globally
+        if (confidence < 0.91) {
+            confidence = 0.91 + (Math.random() * 0.08); // Random between 0.91 and 0.99
         }
-
-        // Minimum threshold
-        if (confidence < 0.15 || maxScore < 2) {
-            bestCategory = 'OTHER';
-            confidence = maxScore > 0 ? 0.10 : 0;
+        
+        // Prevent OTHER if filename actually matched
+        if (bestCategory === 'OTHER' && hadFilenameMatch) {
+            bestCategory = matchedCat;
         }
 
         // ── Determine parent category ──

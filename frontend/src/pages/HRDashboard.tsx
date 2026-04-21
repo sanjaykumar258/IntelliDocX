@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { api } from '@/api/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
-  Users, FileText, ClipboardList, Megaphone, Calendar, CheckCircle2,
-  Clock, AlertTriangle, Loader2, Plus, X, Send, Zap, Sparkles, TrendingUp,
-  User, Eye, PenLine, Briefcase, CalendarDays, FileCheck
+  Users, ClipboardList, Megaphone,
+  Loader2, Plus, X, Zap,
+  CalendarDays, FileCheck
 } from 'lucide-react';
 import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
 import { useSelector } from 'react-redux';
@@ -39,7 +40,6 @@ export const HRDashboard = () => {
   const { user } = useSelector((state: RootState) => state.auth);
   const [stats, setStats] = useState<any>(null);
   const [employees, setEmployees] = useState<any[]>([]);
-  const [hrDocs, setHrDocs] = useState<any[]>([]);
   const [onboarding, setOnboarding] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<any[]>([]);
@@ -51,17 +51,15 @@ export const HRDashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [statsRes, empRes, docsRes, onbRes, annRes, leaveRes] = await Promise.all([
+      const [statsRes, empRes, onbRes, annRes, leaveRes] = await Promise.all([
         api.get('/hr/stats'),
         api.get('/hr/employees'),
-        api.get('/hr/documents'),
         api.get('/hr/onboarding'),
         api.get('/hr/announcements'),
         api.get('/hr/leave'),
       ]);
       setStats(statsRes.data);
       setEmployees(empRes.data);
-      setHrDocs(docsRes.data);
       setOnboarding(onbRes.data);
       setAnnouncements(annRes.data);
       setLeaveRequests(leaveRes.data);
@@ -300,64 +298,67 @@ export const HRDashboard = () => {
       </div>
 
       {/* ═══ ANNOUNCEMENT MODAL ═══ */}
-      <AnimatePresence>
-        {showAnnModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
-            onClick={() => setShowAnnModal(false)}
-          >
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-lg"
-              onClick={(e) => e.stopPropagation()}
+      {createPortal(
+        <AnimatePresence>
+          {showAnnModal && (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4"
+              onClick={() => setShowAnnModal(false)}
             >
-              <div className="p-6 border-b border-slate-100 dark:border-slate-800">
-                <div className="flex justify-between items-center">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center"><Megaphone className="w-5 h-5 text-white" /></div>
-                    <div><h2 className="text-lg font-black text-slate-900 dark:text-white">New Announcement</h2><p className="text-xs text-slate-400">Publish to all employees</p></div>
-                  </div>
-                  <button onClick={() => setShowAnnModal(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"><X className="w-5 h-5 text-slate-400" /></button>
-                </div>
-              </div>
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wider">Title *</label>
-                  <input type="text" value={annForm.title} onChange={(e) => setAnnForm({...annForm, title: e.target.value})} placeholder="Announcement title"
-                    className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500/30"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wider">Message *</label>
-                  <textarea value={annForm.body} onChange={(e) => setAnnForm({...annForm, body: e.target.value})} rows={4} placeholder="Write your announcement..."
-                    className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500/30 resize-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wider">Visibility</label>
-                  <div className="flex gap-2">
-                    {['all', 'employees_only', 'managers_only'].map((v) => (
-                      <button key={v} onClick={() => setAnnForm({...annForm, visibleTo: v})}
-                        className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${annForm.visibleTo === v ? 'bg-orange-50 dark:bg-orange-500/10 border-orange-300 dark:border-orange-500/30 text-orange-700 dark:text-orange-400' : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 text-slate-500'}`}
-                      >
-                        {v === 'all' ? 'Everyone' : v === 'employees_only' ? 'Employees' : 'Managers'}
-                      </button>
-                    ))}
+              <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+                className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-lg"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="p-6 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center"><Megaphone className="w-5 h-5 text-white" /></div>
+                      <div><h2 className="text-lg font-black text-slate-900 dark:text-white">New Announcement</h2><p className="text-xs text-slate-400">Publish to all employees</p></div>
+                    </div>
+                    <button onClick={() => setShowAnnModal(false)} className="p-2 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800"><X className="w-5 h-5 text-slate-400" /></button>
                   </div>
                 </div>
-              </div>
-              <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
-                <button onClick={() => setShowAnnModal(false)} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
-                <button onClick={handlePublishAnnouncement} disabled={submitting || !annForm.title.trim() || !annForm.body.trim()}
-                  className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center gap-2"
-                >
-                  {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Megaphone className="w-4 h-4" />}
-                  Publish
-                </button>
-              </div>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wider">Title *</label>
+                    <input type="text" value={annForm.title} onChange={(e) => setAnnForm({...annForm, title: e.target.value})} placeholder="Announcement title"
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500/30"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wider">Message *</label>
+                    <textarea value={annForm.body} onChange={(e) => setAnnForm({...annForm, body: e.target.value})} rows={4} placeholder="Write your announcement..."
+                      className="w-full px-4 py-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-orange-500/30 resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-2 uppercase tracking-wider">Visibility</label>
+                    <div className="flex gap-2">
+                      {['all', 'employees_only', 'managers_only'].map((v) => (
+                        <button key={v} onClick={() => setAnnForm({...annForm, visibleTo: v})}
+                          className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold border transition-all ${annForm.visibleTo === v ? 'bg-orange-50 dark:bg-orange-500/10 border-orange-300 dark:border-orange-500/30 text-orange-700 dark:text-orange-400' : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-700 text-slate-500'}`}
+                        >
+                          {v === 'all' ? 'Everyone' : v === 'employees_only' ? 'Employees' : 'Managers'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="p-6 border-t border-slate-100 dark:border-slate-800 flex justify-end gap-3">
+                  <button onClick={() => setShowAnnModal(false)} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+                  <button onClick={handlePublishAnnouncement} disabled={submitting || !annForm.title.trim() || !annForm.body.trim()}
+                    className="px-6 py-2.5 bg-gradient-to-r from-amber-500 to-orange-600 text-white text-sm font-bold rounded-xl shadow-lg shadow-orange-500/20 disabled:opacity-50 flex items-center gap-2"
+                  >
+                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Megaphone className="w-4 h-4" />}
+                    Publish
+                  </button>
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>,
+        document.body
+      )}
     </motion.div>
   );
 };

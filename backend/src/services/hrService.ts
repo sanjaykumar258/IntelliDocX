@@ -1,4 +1,5 @@
 import prisma from '../utils/prisma';
+import { createNotification } from './notificationService';
 
 export const listEmployees = async (organizationId: string) => {
   return prisma.hrEmployee.findMany({
@@ -100,23 +101,59 @@ export const listLeaveRequests = async (organizationId: string, employeeId?: str
 };
 
 export const createLeaveRequest = async (data: any) => {
-  return prisma.leaveRequest.create({ data, include: { employee: { include: { user: { select: { name: true } } } } } });
+  // Check for overlapping leaves
+  const overlappingLeaves = await prisma.leaveRequest.findFirst({
+    where: {
+      employeeId: data.employeeId,
+      status: { in: ['PENDING', 'APPROVED'] },
+      AND: [
+        { fromDate: { lte: data.toDate } },
+        { toDate: { gte: data.fromDate } }
+      ]
+    }
+  });
+
+  if (overlappingLeaves) {
+    throw new Error('Leave request overlaps with an existing pending or approved leave.');
+  }
+
+  const leave = await prisma.leaveRequest.create({ data, include: { employee: { include: { user: { select: { name: true } } } } } });
+  
+  // Notify HR Managers
+  const hrs = await prisma.user.findMany({
+    where: { organizationId: data.organizationId, role: { in: ['HR_MANAGER', 'ADMIN', 'SUPER_ADMIN'] } }
+  });
+  for (const hr of hrs) {
+    await createNotification(
+      hr.id,
+      hr.organizationId,
+      'SYSTEM',
+      'New Leave Request',
+      `${leave.employee.user.name} submitted a ${leave.leaveType} request.`
+    );
+  }
+  
+  return leave;
 };
 
 export const approveLeave = async (id: string, approvedById: string) => {
-  return prisma.leaveRequest.update({ where: { id }, data: { status: 'APPROVED', approvedById } });
+  const leave = await prisma.leaveRequest.update({ where: { id }, data: { status: 'APPROVED', approvedById }, include: { employee: true } });
+  await createNotification(leave.employee.userId, leave.organizationId, 'SYSTEM', 'Leave Approved', `Your ${leave.leaveType} request has been approved.`);
+  return leave;
 };
 
 export const rejectLeave = async (id: string, approvedById: string) => {
-  return prisma.leaveRequest.update({ where: { id }, data: { status: 'REJECTED', approvedById } });
+  const leave = await prisma.leaveRequest.update({ where: { id }, data: { status: 'REJECTED', approvedById }, include: { employee: true } });
+  await createNotification(leave.employee.userId, leave.organizationId, 'SYSTEM', 'Leave Rejected', `Your ${leave.leaveType} request was rejected.`);
+  return leave;
 };
 
 export const getHrStats = async (organizationId: string) => {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const [totalEmployees, newThisMonth, pendingDocs, activeOnboarding, pendingLeaves] = await Promise.all([
-    prisma.hrEmployee.count({ where: { organizationId, status: 'ACTIVE' } }),
-    prisma.hrEmployee.count({ where: { organizationId, createdAt: { gte: monthStart } } }),
+    prisma.user.count({ where: { organizationId, role: { not: 'GUEST' } } }),
+    prisma.user.count({ where: { organizationId, createdAt: { gte: monthStart }, role: { not: 'GUEST' } } }),
     prisma.hrDocument.count({ where: { organizationId, requiresSignature: true, signedAt: null } }),
     prisma.onboardingChecklist.count({ where: { organizationId, status: { not: 'done' } } }),
     prisma.leaveRequest.count({ where: { organizationId, status: 'PENDING' } }),

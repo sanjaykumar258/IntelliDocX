@@ -217,7 +217,14 @@ export const ManagerDashboard = () => {
               </div>
             </div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">
-              <span className="animated-gradient-text">Good morning, {user?.name?.split(' ')[0] || roleConfig.title}</span>{' '}
+              <span className="animated-gradient-text">
+                {(() => {
+                  const hour = new Date().getHours();
+                  if (hour < 12) return 'Good morning';
+                  if (hour < 18) return 'Good afternoon';
+                  return 'Good evening';
+                })()}, {user?.name?.split(' ')[0] || roleConfig.title}
+              </span>{' '}
               <span className="inline-block hover:rotate-12 hover:scale-125 transition-transform origin-bottom-right cursor-default">👋</span>
             </h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium text-lg">{roleConfig.subtitle}</p>

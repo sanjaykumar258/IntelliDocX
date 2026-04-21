@@ -114,10 +114,11 @@ export const performAction = async (req: AuthRequest, res: Response) => {
 
 export const getActiveInstances = async (req: AuthRequest, res: Response) => {
   try {
+    // Include both PENDING and ESCALATED workflows so the dashboard shows all active cases
     const instances = await prisma.workflowInstance.findMany({
       where: {
         organizationId: req.user.organizationId,
-        status: WorkflowStatus.PENDING,
+        status: { in: [WorkflowStatus.PENDING, 'ESCALATED' as any] },
       },
       include: {
         document: {
@@ -137,9 +138,9 @@ export const getActiveInstances = async (req: AuthRequest, res: Response) => {
       orderBy: { startedAt: 'desc' }
     });
 
-    return res.json({ 
-      success: true, 
-      data: instances.filter(i => i.document !== null)
+    return res.json({
+      success: true,
+      data: instances.filter(i => i.document !== null),
     });
   } catch (error) {
     console.error('Failed to fetch active workflows:', error);

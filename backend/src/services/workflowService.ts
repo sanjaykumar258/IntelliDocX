@@ -157,10 +157,15 @@ export const processAction = async (
 
     if (!currentStep) throw new Error('Current step not found');
 
-    // Role Validation — ADMIN/SUPER_ADMIN can override any step
-    const isAdmin = role === Role.ADMIN || (role as string) === 'SUPER_ADMIN';
-    if (!isAdmin && currentStep.requiredRole !== role) {
-      throw new Error(`Unauthorized: Only ${currentStep.requiredRole} can perform this action at this step`);
+    // Role Validation — Higher roles can override lower roles
+    const ROLE_HIERARCHY: Record<string, number> = {
+      SUPER_ADMIN: 100, ADMIN: 90, MANAGER: 80, HR_MANAGER: 75, IT_MANAGER: 75, TEAM_LEAD: 60, EMPLOYEE: 40, GUEST: 10
+    };
+    const userLvl = ROLE_HIERARCHY[role as string] || 0;
+    const requiredLvl = ROLE_HIERARCHY[currentStep.requiredRole as string] || 999;
+
+    if (userLvl < requiredLvl) {
+      throw new Error(`Unauthorized: Requires at least ${currentStep.requiredRole} level to perform this action`);
     }
 
     if ((action as string) === 'ESCALATE') {

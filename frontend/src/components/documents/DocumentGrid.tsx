@@ -11,9 +11,11 @@ interface DocumentGridProps {
   onDownload: (id: string) => void;
   onPreview: (id: string) => void;
   onChat: (id: string, title: string) => void;
+  selectedDocs?: Set<string>;
+  onToggleSelect?: (id: string) => void;
 }
 
-export const DocumentGrid = ({ documents, loading, onVerify, onDelete, onDownload, onPreview, onChat }: DocumentGridProps) => {
+export const DocumentGrid = ({ documents, loading, onVerify, onDelete, onDownload, onPreview, onChat, selectedDocs, onToggleSelect }: DocumentGridProps) => {
   if (loading) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -55,6 +57,8 @@ export const DocumentGrid = ({ documents, loading, onVerify, onDelete, onDownloa
             onVerify={onVerify}
             onChat={onChat}
             onDelete={onDelete}
+            isSelected={selectedDocs?.has(doc.id)}
+            onToggleSelect={() => onToggleSelect?.(doc.id)}
           />
         ))}
       </AnimatePresence>

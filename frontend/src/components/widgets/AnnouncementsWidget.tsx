@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/api/client';
-import { Megaphone, ChevronRight, Calendar, Eye, Sparkles } from 'lucide-react';
+import { Megaphone, Calendar } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 export const AnnouncementsWidget = () => {

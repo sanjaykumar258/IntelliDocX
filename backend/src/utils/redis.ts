@@ -37,3 +37,18 @@ redisClient.on('error', (err) => console.log('Redis Client Error', err));
 })();
 
 export default redisClient;
+
+export const clearDocumentCache = async (organizationId: string) => {
+  if (redisClient.isOpen) {
+    try {
+      const pattern = `docs:list:${organizationId}:*`;
+      const keys = await redisClient.keys(pattern);
+      if (keys.length > 0) {
+        await redisClient.del(keys);
+        console.log(`[Cache] Cleared ${keys.length} keys for org ${organizationId}`);
+      }
+    } catch (err) {
+      console.warn('[Cache] Failed to clear document cache', err);
+    }
+  }
+};

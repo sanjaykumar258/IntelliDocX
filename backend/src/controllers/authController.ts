@@ -15,14 +15,19 @@ export const login = async (req: Request, res: Response) => {
   try {
     console.log(`[LOGIN ATTEMPT] Email: ${data.email}`);
     const userAgent = req.headers['user-agent'] || 'unknown';
-    const result = await authService.login(data.email, data.password, ip, userAgent);
+    const result = await authService.login(data.email, data.password, ip, userAgent) as any;
+    // @ts-ignore
+    if ((result as any).requires2fa) {
+      console.log(`[LOGIN 2FA REQUIRED] User: ${data.email}`);
+      return res.json(result);
+    }
     console.log(`[LOGIN SUCCESS] User: ${data.email}`);
     
     // Audit log
     await auditService.logAction(
       AuditAction.LOGIN,
-      result.user.id,
-      result.user.organizationId,
+      (result as any).user.id,
+      (result as any).user.organizationId,
       undefined,
       req.ip
     );
@@ -85,5 +90,119 @@ export const logout = async (req: Request, res: Response) => {
     res.status(200).json({ message: 'Logged out' });
   } catch (error: any) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// --- Sessions --- //
+
+export const getSessions = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const refreshToken = (req.query.refreshToken as string) || '';
+    const sessions = await authService.getSessions(userId);
+    let currentId = '';
+    if (refreshToken) {
+      const tokenRec = await prisma.refreshToken.findUnique({ where: { token: refreshToken } });
+      if (tokenRec) currentId = tokenRec.id;
+    }
+    const mapped = sessions.map((s: any) => ({
+      ...s,
+      isCurrent: s.id === currentId
+    }));
+    mapped.sort((a: any, b: any) => (a.isCurrent ? -1 : (b.isCurrent ? 1 : 0)));
+    res.json(mapped);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const revokeSessionById = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { id } = req.params;
+    await authService.revokeSessionById(id, userId);
+    res.json({ message: 'Session revoked' });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const revokeAllSessions = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { refreshToken } = req.body;
+    let excludeTokenId;
+    if (refreshToken) {
+      const storedToken = await prisma.refreshToken.findUnique({ where: { token: refreshToken } });
+      if (storedToken) excludeTokenId = storedToken.id;
+    }
+    await authService.revokeAllSessions(userId, excludeTokenId);
+    res.json({ message: 'All other sessions revoked' });
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// --- 2FA --- //
+
+export const enable2fa = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const email = (req as any).user.email;
+    const data = await authService.generate2faSecret(userId, email);
+    res.json(data);
+  } catch (error: any) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const verify2fa = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ message: 'Token required' });
+    
+    await authService.verifyAndEnable2fa(userId, token);
+    res.json({ message: '2FA Enabled successfully' });
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+export const disable2fa = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user.userId;
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ message: 'Token required' });
+    
+    await authService.disable2fa(userId, token);
+    res.json({ message: '2FA Disabled successfully' });
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
+  }
+};
+
+
+export const verifyLogin2fa = async (req: Request, res: Response) => {
+  try {
+    const { userId, token } = req.body;
+    if (!userId || !token) return res.status(400).json({ message: 'User ID and token required' });
+    
+    const ip = req.ip || 'unknown';
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    
+    const result = await authService.loginWith2fa(userId, token, ip, userAgent) as any;
+    
+    await auditService.logAction(
+      AuditAction.LOGIN,
+      (result as any).user.id,
+      (result as any).user.organizationId,
+      undefined,
+      req.ip
+    );
+    
+    res.json(result);
+  } catch (error: any) {
+    res.status(401).json({ message: error.message });
   }
 };

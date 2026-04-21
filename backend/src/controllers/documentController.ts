@@ -140,7 +140,7 @@ export const getDocuments = async (req: AuthRequest, res: Response) => {
   try {
     const user = req.user;
     const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const limit = parseInt(req.query.limit as string) || 1000;
 
     const { category, department } = req.query;
     const filters = {
@@ -443,6 +443,170 @@ export const deleteDocument = async (req: AuthRequest, res: Response) => {
     }
   } catch (error: any) {
     console.error('[DELETE_500]', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ===== Bulk Delete — DELETE /documents/bulk?ids=id1,id2,id3 =====
+export const bulkDeleteDocuments = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+    const idsParam = req.query.ids as string;
+
+    if (!idsParam) {
+      return res.status(400).json({ message: 'No document IDs provided' });
+    }
+
+    const ids = idsParam.split(',').map(id => id.trim()).filter(Boolean);
+
+    if (ids.length === 0) {
+      return res.status(400).json({ message: 'No valid document IDs provided' });
+    }
+
+    // Enforce a reasonable batch limit to prevent abuse
+    if (ids.length > 100) {
+      return res.status(400).json({ message: 'Cannot delete more than 100 documents at once' });
+    }
+
+    const results: { id: string; status: 'deleted' | 'error' | 'skipped'; reason?: string }[] = [];
+
+    for (const id of ids) {
+      try {
+        const doc = await documentService.getDocumentById(id, user.organizationId);
+        if (!doc) {
+          results.push({ id, status: 'skipped', reason: 'Not found' });
+          continue;
+        }
+
+        // Ownership / role check — employees can only delete their own docs
+        if (user.role === 'EMPLOYEE' && doc.ownerId !== user.userId) {
+          results.push({ id, status: 'skipped', reason: 'Permission denied' });
+          continue;
+        }
+
+        // Delete from MinIO
+        try {
+          const latestVersion = await prisma.documentVersion.findFirst({
+            where: { documentId: id },
+            orderBy: { versionNumber: 'desc' },
+          });
+          if (latestVersion?.storagePath) {
+            const { deleteFile } = await import('../storage/minioClient');
+            await deleteFile(latestVersion.storagePath).catch(() => {/* non-critical */});
+          }
+        } catch (_) { /* non-critical storage error */ }
+
+        // Hard delete via transaction
+        await prisma.$transaction(async (tx) => {
+          await tx.auditLog.updateMany({ where: { documentId: id }, data: { documentId: null } });
+          await tx.workflowInstance.deleteMany({ where: { documentId: id } });
+          await tx.documentMetadata.deleteMany({ where: { documentId: id } });
+          await tx.documentVersion.deleteMany({ where: { documentId: id } });
+          await tx.documentShare.deleteMany({ where: { documentId: id } });
+          await tx.documentComment.deleteMany({ where: { documentId: id } });
+          await tx.document.delete({ where: { id } });
+        });
+
+        // Audit log
+        await auditService.logAction(AuditAction.DELETE, user.userId, user.organizationId, id, req.ip);
+
+        // Real-time event
+        io.to(`org:${user.organizationId}`).emit('document:deleted', { documentId: id });
+
+        results.push({ id, status: 'deleted' });
+      } catch (err: any) {
+        results.push({ id, status: 'error', reason: err.message });
+      }
+    }
+
+    // Invalidate Redis cache for the organization
+    try {
+      const rc: any = require('../utils/redis').default;
+      if (rc?.isOpen) {
+        const keys = await rc.keys(`docs:list:${user.organizationId}:*`);
+        if (keys.length > 0) await rc.del(keys);
+      }
+    } catch (_) { /* non-critical */ }
+
+    const deletedCount = results.filter(r => r.status === 'deleted').length;
+    const errorCount = results.filter(r => r.status === 'error').length;
+
+    res.json({
+      message: `Bulk delete complete: ${deletedCount} deleted, ${errorCount} errors`,
+      results,
+      deletedCount,
+      errorCount,
+    });
+  } catch (error: any) {
+    console.error('[BULK_DELETE_500]', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ===== Delete All — DELETE /documents/all (Admin only) =====
+export const deleteAllDocuments = async (req: AuthRequest, res: Response) => {
+  try {
+    const user = req.user;
+
+    // Only Admin/Super Admin can do this — belt-and-suspenders check
+    if (!['ADMIN', 'SUPER_ADMIN'].includes(user.role)) {
+      return res.status(403).json({ message: 'Forbidden: Only admins can purge all documents' });
+    }
+
+    // Fetch all active documents in the org
+    const allDocs = await prisma.document.findMany({
+      where: { organizationId: user.organizationId, status: { not: 'DELETED' } },
+      select: { id: true },
+    });
+
+    const ids = allDocs.map(d => d.id);
+
+    if (ids.length === 0) {
+      return res.json({ message: 'No documents to delete', deletedCount: 0 });
+    }
+
+    // Delete all MinIO objects
+    try {
+      const versions = await prisma.documentVersion.findMany({
+        where: { documentId: { in: ids } },
+        select: { storagePath: true },
+      });
+      const { deleteFile } = await import('../storage/minioClient');
+      await Promise.allSettled(versions.map(v => deleteFile(v.storagePath)));
+    } catch (_) { /* non-critical */ }
+
+    // Bulk hard-delete via transaction
+    await prisma.$transaction(async (tx) => {
+      await tx.auditLog.updateMany({ where: { documentId: { in: ids } }, data: { documentId: null } });
+      await tx.workflowInstance.deleteMany({ where: { documentId: { in: ids } } });
+      await tx.documentMetadata.deleteMany({ where: { documentId: { in: ids } } });
+      await tx.documentVersion.deleteMany({ where: { documentId: { in: ids } } });
+      await tx.documentShare.deleteMany({ where: { documentId: { in: ids } } });
+      await tx.documentComment.deleteMany({ where: { documentId: { in: ids } } });
+      await tx.document.deleteMany({ where: { id: { in: ids } } });
+    });
+
+    // Invalidate Redis cache
+    try {
+      const rc: any = require('../utils/redis').default;
+      if (rc?.isOpen) {
+        const keys = await rc.keys(`docs:list:${user.organizationId}:*`);
+        if (keys.length > 0) await rc.del(keys);
+      }
+    } catch (_) { /* non-critical */ }
+
+    // Audit log
+    await auditService.logAction(AuditAction.DELETE, user.userId, user.organizationId, undefined, req.ip);
+
+    // Real-time broadcast
+    io.to(`org:${user.organizationId}`).emit('documents:all-deleted', {
+      organizationId: user.organizationId,
+      count: ids.length,
+    });
+
+    res.json({ message: `All ${ids.length} documents purged from vault`, deletedCount: ids.length });
+  } catch (error: any) {
+    console.error('[DELETE_ALL_500]', error);
     res.status(500).json({ message: error.message });
   }
 };

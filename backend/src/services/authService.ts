@@ -4,18 +4,27 @@ import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/
 import redisClient from '../utils/redis';
 import Logger from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
+import * as speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
 
 export const login = async (email: string, password: string, ipAddress: string, userAgent: string) => {
   Logger.info(`[AuthService] Login attempt for: ${email}`);
 
-  const user = await prisma.user.findUnique({ where: { email } });
+  // Explicitly select all needed fields including 2FA
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: {
+      id: true, name: true, email: true, passwordHash: true,
+      role: true, status: true, organizationId: true,
+      isTwoFactorEnabled: true, twoFactorSecret: true,
+      avatarUrl: true, theme: true, accentColor: true,
+    },
+  });
 
   if (!user) {
     Logger.warn(`[AuthService] User not found: ${email}`);
     throw new Error('Invalid credentials');
   }
-
-  Logger.info(`[AuthService] User found: ${user.id} (Role: ${user.role})`);
 
   if (user.status !== 'ACTIVE') {
     Logger.warn(`[AuthService] User inactive: ${email}`);
@@ -26,8 +35,6 @@ export const login = async (email: string, password: string, ipAddress: string, 
   }
 
   const isValid = await comparePassword(password, user.passwordHash);
-  Logger.info(`[AuthService] Password valid: ${isValid}`);
-
   if (!isValid) {
     Logger.warn(`[AuthService] Invalid password for: ${email}`);
     await prisma.loginHistory.create({
@@ -36,7 +43,15 @@ export const login = async (email: string, password: string, ipAddress: string, 
     throw new Error('Invalid credentials');
   }
 
-  // Log success
+  if (user.isTwoFactorEnabled) {
+    Logger.info(`[AuthService] 2FA required for: ${email}`);
+    return { requires2fa: true, userId: user.id };
+  }
+
+  return generateTokensForUser(user, ipAddress, userAgent);
+};
+
+const generateTokensForUser = async (user: any, ipAddress: string, userAgent: string) => {
   await prisma.loginHistory.create({
     data: { userId: user.id, ipAddress, userAgent, success: true }
   });
@@ -52,20 +67,71 @@ export const login = async (email: string, password: string, ipAddress: string, 
   const accessToken = signAccessToken(payload);
   const refreshTokenString = signRefreshToken(payload);
 
-  // Store refresh token in DB
-  // Calculate expiry date based on 7 days (should match JWT expiry)
   const expiresAt = new Date();
   expiresAt.setDate(expiresAt.getDate() + 7);
 
+  // Parse device name from user agent (truncated for storage)
+  const deviceName = (userAgent || 'Unknown Device').substring(0, 100);
+  const location = 'Remote access';
+
+  // Use Prisma unchecked create to include optional fields
   await prisma.refreshToken.create({
     data: {
       token: refreshTokenString,
       userId: user.id,
-      expiresAt
+      expiresAt,
+      deviceName,  // field exists in schema
+      location,    // field exists in schema
     }
   });
 
-  return { user: { id: user.id, name: user.name, email: user.email, role: user.role, organizationId: user.organizationId }, accessToken, refreshToken: refreshTokenString };
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId,
+      isTwoFactorEnabled: user.isTwoFactorEnabled ?? false,
+      avatarUrl: user.avatarUrl || null,
+      theme: user.theme || 'system',
+      accentColor: user.accentColor || '#6366f1',
+    },
+    accessToken,
+    refreshToken: refreshTokenString,
+  };
+};
+
+export const loginWith2fa = async (userId: string, token: string, ipAddress: string, userAgent: string) => {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      id: true, name: true, email: true, passwordHash: true,
+      role: true, status: true, organizationId: true,
+      isTwoFactorEnabled: true, twoFactorSecret: true,
+      avatarUrl: true, theme: true, accentColor: true,
+    },
+  });
+
+  if (!user || user.status !== 'ACTIVE' || !user.twoFactorSecret) {
+    throw new Error('Invalid user or 2FA not configured');
+  }
+
+  const isValid = speakeasy.totp.verify({
+    secret: user.twoFactorSecret,
+    encoding: 'base32',
+    token,
+    window: 1, // Allow 30s clock skew
+  });
+
+  if (!isValid) {
+    await prisma.loginHistory.create({
+      data: { userId: user.id, ipAddress, userAgent, success: false }
+    });
+    throw new Error('Invalid 2FA code');
+  }
+
+  return generateTokensForUser(user, ipAddress, userAgent);
 };
 
 export const refresh = async (token: string, ipAddress: string) => {
@@ -162,3 +228,97 @@ export const revokeSession = async (refreshToken: string) => {
   });
 };
 
+export const revokeSessionById = async (id: string, userId: string) => {
+  await prisma.refreshToken.updateMany({
+    where: { id, userId },
+    data: { revoked: true }
+  });
+  return { success: true };
+};
+
+export const revokeAllSessions = async (userId: string, excludeTokenId?: string) => {
+  await prisma.refreshToken.updateMany({
+    where: {
+      userId,
+      ...(excludeTokenId ? { id: { not: excludeTokenId } } : {})
+    },
+    data: { revoked: true }
+  });
+  return { success: true };
+};
+
+export const getSessions = async (userId: string) => {
+  const tokens = await prisma.refreshToken.findMany({
+    where: { userId, revoked: false, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: 'desc' }
+  });
+
+  return tokens.map(t => ({
+    id: t.id,
+    device: t.deviceName || 'Unknown Device',
+    location: t.location || 'Unknown Location',
+    time: t.createdAt.toISOString(),
+    isCurrent: false // Will be mapped by controller based on active token
+  }));
+};
+
+export const generate2faSecret = async (userId: string, email: string) => {
+  const secret = speakeasy.generateSecret({ name: `IntelliDocX (${email})` });
+  const qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url as string);
+
+  // Save secret temporarily or directly to user (if they must verify to enable, we save it first)
+  await prisma.user.update({
+    where: { id: userId },
+    data: { twoFactorSecret: secret.base32 }
+  });
+
+  return { secret: secret.base32, qrCode: qrCodeDataUrl };
+};
+
+export const verifyAndEnable2fa = async (userId: string, token: string) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.twoFactorSecret) {
+    throw new Error('2FA not initialized for this user');
+  }
+
+  const isValid = speakeasy.totp.verify({
+    secret: user.twoFactorSecret,
+    encoding: 'base32',
+    token
+  });
+
+  if (!isValid) {
+    throw new Error('Invalid 2FA code');
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { isTwoFactorEnabled: true }
+  });
+
+  return { success: true };
+};
+
+export const disable2fa = async (userId: string, token: string) => {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.twoFactorSecret) {
+    throw new Error('2FA not active');
+  }
+
+  const isValid = speakeasy.totp.verify({
+    secret: user.twoFactorSecret,
+    encoding: 'base32',
+    token
+  });
+
+  if (!isValid) {
+    throw new Error('Invalid 2FA code');
+  }
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { isTwoFactorEnabled: false, twoFactorSecret: null }
+  });
+
+  return { success: true };
+};

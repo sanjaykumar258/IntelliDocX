@@ -28,12 +28,21 @@ export const updateUser = async (id: string, data: any) => {
   return prisma.user.update({
     where: { id },
     data,
-    select: { id: true, name: true, email: true, role: true, status: true },
+    select: { id: true, name: true, email: true, role: true, status: true, avatarUrl: true },
   });
 };
 
 export const deleteUser = async (id: string) => {
   return prisma.user.delete({
     where: { id },
+  });
+};
+
+export const deleteAllUsers = async (organizationId: string, currentUserId: string) => {
+  return prisma.user.deleteMany({
+    where: { 
+      organizationId,
+      id: { not: currentUserId }
+    },
   });
 };

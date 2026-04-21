@@ -8,34 +8,56 @@ import { requireRole, requireMinRole } from '../middleware/rbac';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+// All routes in this router require auth (applied by app.ts via protectedMiddleware)
 router.use(requireAuth);
 
-// Upload — Employee+ (not Guests)
+// ── Upload ────────────────────────────────────────────────────
+// Employee+ (not Guests)
 router.post('/upload',
   requireMinRole('EMPLOYEE'),
   upload.array('files'),
   documentController.uploadDocument
 );
 
-// Search — all authenticated
+// ── Search ────────────────────────────────────────────────────
+// All authenticated users
 router.get('/search',
   requireMinRole('GUEST'),
   documentController.searchDocuments
 );
 
-// List — all authenticated
+// ── List ──────────────────────────────────────────────────────
+// All authenticated users
 router.get('/',
   requireMinRole('GUEST'),
   documentController.getDocuments
 );
 
-// Bulk download — Employee+
+// ── Bulk download ─────────────────────────────────────────────
+// Employee+
 router.get('/download-all',
   requireMinRole('EMPLOYEE'),
   documentController.downloadAllDocuments
 );
 
-// Get by ID — all authenticated
+// ── IMPORTANT: Specific non-parameterized routes BEFORE /:id ──
+// These MUST appear before any route with /:id, otherwise Express
+// will intercept 'bulk' and 'all' as values for :id.
+
+// Bulk Delete — Employee+
+router.delete('/bulk',
+  requireMinRole('EMPLOYEE'),
+  documentController.bulkDeleteDocuments
+);
+
+// Delete All — Admin+
+router.delete('/all',
+  requireMinRole('ADMIN'),
+  documentController.deleteAllDocuments
+);
+
+// ── Parameterized routes (:id) — must come AFTER specific routes ─
+// Get by ID — All authenticated
 router.get('/:id',
   requireMinRole('GUEST'),
   documentController.getDocumentById
@@ -54,7 +76,7 @@ router.post('/:id/rollback',
   documentController.rollbackDocument
 );
 
-// Download — all authenticated
+// Download — All authenticated
 router.get('/:id/download',
   requireMinRole('GUEST'),
   documentController.downloadDocument
@@ -66,13 +88,13 @@ router.delete('/:id',
   documentController.deleteDocument
 );
 
-// Versions — all authenticated
+// Versions — All authenticated
 router.get('/:id/versions',
   requireMinRole('GUEST'),
   documentController.getDocumentVersions
 );
 
-// Verify — all authenticated
+// Verify — All authenticated
 router.get('/:id/verify',
   requireMinRole('GUEST'),
   documentController.verifyDocument
@@ -90,29 +112,27 @@ router.post('/:id/chat',
   documentController.chatWithDocument
 );
 
-// Document Expiry
+// Document Expiry — Manager+
 router.post('/:id/set-expiry',
   requireMinRole('MANAGER'),
   documentController.setExpiry
 );
 
-// Comments
+// Comments — Get: all auth; Post: Employee+
 router.get('/:id/comments',
   requireMinRole('GUEST'),
   documentController.getComments
 );
-
 router.post('/:id/comments',
   requireMinRole('EMPLOYEE'),
   documentController.addComment
 );
 
-// Sharing
+// Sharing — Employee+
 router.post('/:id/share',
   requireMinRole('EMPLOYEE'),
   documentController.createShareLink
 );
-
 router.get('/:id/shares',
   requireMinRole('EMPLOYEE'),
   documentController.getShares

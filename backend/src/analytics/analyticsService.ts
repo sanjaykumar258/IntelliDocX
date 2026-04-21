@@ -334,10 +334,26 @@ export class AnalyticsService {
                 _count: { id: true }
             });
 
+            // Storage used by this user's documents
+            const storageStats = await prisma.document.aggregate({
+                where: { ownerId: userId, organizationId, status: { not: DocumentStatus.DELETED } },
+                _sum: { fileSize: true }
+            });
+            const myStorageBytes = storageStats._sum.fileSize || 0;
+
+            const myApprovedWorkflows = await prisma.workflowInstance.count({
+                where: {
+                    document: { organizationId, ownerId: userId },
+                    status: WorkflowStatus.APPROVED
+                }
+            });
+
             return {
                 myDocumentsCount: myDocs,
                 myPendingWorkflows: myPendingWorkflows,
+                myApprovedWorkflows: myApprovedWorkflows,
                 recentActivity,
+                myStorageBytes,
                 categoryDistribution: docsByCategory.map(c => ({
                     category: c.category || 'Uncategorized',
                     count: c._count.id

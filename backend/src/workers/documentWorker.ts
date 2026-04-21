@@ -142,12 +142,32 @@ setTimeout(() => {
         // ═══ PHASE 5: Update Metadata ═══
         const t1 = Date.now();
         const catUpper = (result.category || '').toUpperCase().replace(/\s+/g, '_');
+
+        // --- NEW: Type-aware extraction (always 6 fields) ---
+        let typedMeta: Record<string, any> = {};
+        try {
+          // Grab the extracted text from DB if we stored it, or from the worker flow
+          let docText = '';
+          let docFileName = '';
+          try {
+            const doc = await prisma.document.findUnique({ where: { id: documentId }, select: { extractedText: true, title: true, fileName: true } });
+            docText = doc?.extractedText || '';
+            docFileName = doc?.fileName || doc?.title || '';
+          } catch {} 
+          const { extractTypedMetadata } = require('../services/metadataExtractor');
+          typedMeta = extractTypedMetadata(docText, catUpper, docFileName);
+          Logger.info(`[Worker] Type-aware extraction for ${catUpper} (fallback file: ${docFileName}): ${Object.keys(typedMeta).length} fields`);
+        } catch (extractErr: any) {
+          Logger.warn(`[Worker] Type-aware extraction failed (non-blocking): ${extractErr.message}`);
+        }
+
         const richMetadata: Record<string, any> = {
           ...(result.extractedData || {}),
           parentCategory: result.parentCategory || SUB_TO_PARENT[catUpper] || 'OTHER',
           subCategory: result.subCategory || result.category,
           classifiedBy: aiServiceAvailable ? 'AI_SERVICE' : 'LOCAL_CLASSIFIER',
           classifiedAt: new Date().toISOString(),
+          typedMeta, // always exactly 6 fields with label/value/isFallback
         };
 
         // Only include AI suite results if they have meaningful data

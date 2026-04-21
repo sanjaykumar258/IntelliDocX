@@ -28,11 +28,7 @@ class ChatService:
             }
 
         if not self.client:
-            return {
-                "answer": "AI Chat is currently unavailable (API key missing).",
-                "confidence": 0.0,
-                "source_found": True
-            }
+            raise Exception("AI Chat is currently unavailable (API key missing).")
 
         # 2. Build prompt
         # We limit the context size
@@ -75,20 +71,13 @@ class ChatService:
                 "source_found": True
             }
         except Exception as e:
-            return {
-                "answer": f"An error occurred while processing your request: {str(e)}",
-                "confidence": 0.0,
-                "source_found": True
-            }
+            print(f"Groq Chat error: {e}")
+            raise e
 
     async def system_chat(self, organization_id: str, message: str, history: List[Dict] = []) -> Dict[str, Any]:
         """Queries the general assistant without a specific document context."""
         if not self.client:
-            return {
-                "answer": "IntelliBot is currently unavailable (API key missing).",
-                "confidence": 0.0,
-                "source_found": False
-            }
+            raise Exception("IntelliBot is currently unavailable (API key missing).")
 
         system_prompt = """
         You are IntelliBot, the intelligent assistant for the IntelliDocX Enterprise Document Management System.
@@ -119,10 +108,6 @@ class ChatService:
             }
         except Exception as e:
             print(f"Groq System Chat error: {e}")
-            return {
-                "answer": "I'm sorry, I encountered an error while processing your request.",
-                "confidence": 0.0,
-                "source_found": False
-            }
+            raise e
 
 chat_service = ChatService()

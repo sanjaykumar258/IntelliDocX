@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    X, Send, Bot, User, Sparkles, MessageSquare, ChevronDown
+    X, Send, Bot, User, Sparkles, FileStack
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,10 +9,6 @@ import {
 } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/api/client';
-import { useToast } from '@/components/ui/use-toast';
-import {
-    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '@/store';
 import { setIntelliBotOpen } from '@/features/ui/uiSlice';
@@ -33,56 +29,14 @@ export const IntelliBot: React.FC = () => {
         }],
         document: [{
             role: 'assistant',
-            content: "Select a document from the dropdown below to start asking questions about it.",
+            content: "I have access to all your uploaded documents. Ask me anything — I'll analyze every file and find the answer for you!",
         }]
     });
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
-    const { toast } = useToast();
-
-    // Document selection state
-    const [documents, setDocuments] = useState<any[]>([]);
-    const [selectedDoc, setSelectedDoc] = useState<any | null>(null);
 
     const setIsOpen = (val: boolean) => dispatch(setIntelliBotOpen(val));
-
-    useEffect(() => {
-        if (isOpen && documents.length === 0) {
-            fetchDocuments();
-        }
-    }, [isOpen]);
-
-    const fetchDocuments = async () => {
-        try {
-            const res = await api.get('/documents?limit=10');
-            setDocuments(res.data.data || []);
-            if (res.data.data?.length > 0 && !selectedDoc) {
-                setSelectedDoc(res.data.data[0]);
-                // Re-initialize document welcome message with selected doc
-                setMessages(prev => ({
-                    ...prev,
-                    document: [{
-                        role: 'assistant',
-                        content: `I'm ready to answer questions about "${res.data.data[0].title}". What would you like to know?`
-                    }]
-                }));
-            }
-        } catch (error) {
-            console.error('Failed to fetch docs for IntelliBot', error);
-        }
-    };
-
-    const handleDocSelect = (doc: any) => {
-        setSelectedDoc(doc);
-        setMessages(prev => ({
-            ...prev,
-            document: [{
-                role: 'assistant',
-                content: `I'm ready to answer questions about "${doc.title}". What would you like to know?`
-            }]
-        }));
-    };
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -92,10 +46,6 @@ export const IntelliBot: React.FC = () => {
 
     const handleSend = async () => {
         if (!input.trim() || isLoading) return;
-        if (mode === 'document' && !selectedDoc) {
-            toast({ title: 'Alert', description: 'Please select a document first.' });
-            return;
-        }
 
         const userMessage = input.trim();
         setInput('');
@@ -117,7 +67,8 @@ export const IntelliBot: React.FC = () => {
                     }))
                 });
             } else {
-                response = await api.post(`/documents/${selectedDoc.id}/chat`, {
+                // Document mode — sends to the all-documents endpoint
+                response = await api.post('/chat/documents', {
                     message: userMessage,
                     history: messages.document.map(m => ({
                         role: m.role, content: m.content
@@ -200,32 +151,19 @@ export const IntelliBot: React.FC = () => {
                             <Bot size={14} /> System
                         </TabsTrigger>
                         <TabsTrigger value="document" className="flex items-center gap-2">
-                            <MessageSquare size={14} /> Document
+                            <FileStack size={14} /> All Documents
                         </TabsTrigger>
                     </TabsList>
                 </div>
                 
                 {mode === 'document' && (
-                    <div className="px-4 py-2 border-b bg-muted/20 flex items-center justify-between">
-                        <span className="text-xs font-medium text-muted-foreground">Context:</span>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" size="sm" className="h-7 text-xs max-w-[200px] flex justify-between">
-                                    <span className="truncate">{selectedDoc?.title || "Select Document"}</span>
-                                    <ChevronDown className="ml-2 h-3 w-3 shrink-0" />
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-[200px]">
-                                {documents.map(doc => (
-                                    <DropdownMenuItem key={doc.id} onClick={() => handleDocSelect(doc)} className="text-xs cursor-pointer">
-                                        <span className="truncate">{doc.title}</span>
-                                    </DropdownMenuItem>
-                                ))}
-                                {documents.length === 0 && (
-                                    <div className="p-2 text-xs text-muted-foreground text-center">No documents available</div>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
+                    <div className="px-4 py-2 border-b bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-500/10 dark:to-purple-500/10">
+                        <div className="flex items-center gap-2">
+                            <FileStack className="w-4 h-4 text-indigo-500 shrink-0" />
+                            <span className="text-xs font-semibold text-indigo-700 dark:text-indigo-300">
+                                Analyzing all uploaded documents in your organization
+                            </span>
+                        </div>
                     </div>
                 )}
 
@@ -238,7 +176,7 @@ export const IntelliBot: React.FC = () => {
                                         <div className={`h-8 w-8 rounded-full flex items-center justify-center border shrink-0 shadow-sm ${m.role === 'assistant' ? 'bg-primary border-primary text-primary-foreground' : 'bg-background border-muted'}`}>
                                             {m.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}
                                         </div>
-                                        <div className={`rounded-xl p-3 text-sm shadow-sm ${m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-background border rounded-tl-none'}`}>
+                                        <div className={`rounded-xl p-3 text-sm shadow-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-background border rounded-tl-none'}`}>
                                             {m.content}
                                         </div>
                                     </div>

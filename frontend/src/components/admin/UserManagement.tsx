@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { UserPlus, Mail, ShieldAlert, BadgeCheck, PowerOff, Loader2, ChevronRight } from 'lucide-react';
+import { UserPlus, Mail, ShieldAlert, BadgeCheck, PowerOff, Loader2, ChevronRight, Trash2 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
@@ -78,6 +78,17 @@ export const UserManagement = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (!confirm(`Are you sure you want to delete ALL users except yourself? This action is PERMANENT and cannot be undone.`)) return;
+    try {
+      await api.delete(`/users/all`);
+      toast({ title: "Users Cleared", description: `Successfully deleted all other users.`, className: "bg-red-600 text-white border-0" });
+      fetchUsers();
+    } catch (error) {
+      toast({ variant: "destructive", title: "Error", description: "Failed to clear users" });
+    }
+  };
+
   const staggerContainer = {
     hidden: { opacity: 0 },
     show: {
@@ -103,14 +114,19 @@ export const UserManagement = () => {
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Control who can access your organization's workspace.</p>
         </div>
         
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white border-0 shadow-lg shadow-indigo-500/25 transition-all overflow-hidden relative group h-11 px-6 rounded-xl">
-              <span className="absolute inset-0 w-full h-full bg-white/20 scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-300 ease-out" />
-              <UserPlus className="w-4 h-4 mr-2" />
-              Provision User
-            </Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-3">
+          <Button onClick={handleClearAll} variant="outline" className="h-11 px-6 rounded-xl border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:hover:bg-red-900/20">
+            <Trash2 className="w-4 h-4 mr-2" />
+            Clear All
+          </Button>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white border-0 shadow-lg shadow-indigo-500/25 transition-all overflow-hidden relative group h-11 px-6 rounded-xl">
+                <span className="absolute inset-0 w-full h-full bg-white/20 scale-x-0 group-hover:scale-x-100 origin-left transition-transform duration-300 ease-out" />
+                <UserPlus className="w-4 h-4 mr-2" />
+                Provision User
+              </Button>
+            </DialogTrigger>
           <DialogContent className="sm:max-w-[425px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-2xl border-slate-200 dark:border-slate-800 rounded-3xl shadow-2xl">
             <DialogHeader>
               <DialogTitle className="text-xl font-bold">Add Platform User</DialogTitle>
@@ -168,6 +184,7 @@ export const UserManagement = () => {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Directory Table */}
@@ -259,7 +276,7 @@ export const UserManagement = () => {
                           className="w-8 h-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-500/10 transition-colors opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto shadow-sm disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-400"
                           title="Revoke Access"
                         >
-                          <PowerOff className="w-4 h-4" />
+                          <Trash2 className="w-4 h-4" />
                         </Button>
                       </td>
                     </motion.tr>

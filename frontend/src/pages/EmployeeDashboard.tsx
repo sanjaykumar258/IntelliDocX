@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/api/client';
+import { socketService } from '@/api/socketService';
+import { useCallback } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { format, formatDistanceToNow } from 'date-fns';
 import { Activity, FileText, TrendingUp, TrendingDown, GitPullRequest, Cloud, Upload, Sparkles, Zap, Rocket, FolderOpen, Bot } from 'lucide-react';
@@ -84,19 +86,40 @@ export const EmployeeDashboard = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const response = await api.get('/analytics/me');
+      setData(response.data);
+    } catch (error) {
+      console.error('Failed to fetch dashboard data', error);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      try {
-        const response = await api.get('/analytics/me');
-        setData(response.data);
-      } catch (error) {
-        console.error('Failed to fetch dashboard data', error);
-      } finally {
-        setLoading(false);
+    fetchDashboardData();
+
+    if (socketService.socket) {
+      socketService.socket.on('document:uploaded', fetchDashboardData);
+      socketService.socket.on('document:deleted', fetchDashboardData);
+      socketService.socket.on('workflow:updated', fetchDashboardData);
+      socketService.socket.on('workflow:escalated', fetchDashboardData);
+      socketService.socket.on('workflow:approved', fetchDashboardData);
+      socketService.socket.on('workflow:rejected', fetchDashboardData);
+    }
+
+    return () => {
+      if (socketService.socket) {
+        socketService.socket.off('document:uploaded', fetchDashboardData);
+        socketService.socket.off('document:deleted', fetchDashboardData);
+        socketService.socket.off('workflow:updated', fetchDashboardData);
+        socketService.socket.off('workflow:escalated', fetchDashboardData);
+        socketService.socket.off('workflow:approved', fetchDashboardData);
+        socketService.socket.off('workflow:rejected', fetchDashboardData);
       }
     };
-    fetchDashboardData();
-  }, []);
+  }, [fetchDashboardData]);
 
   if (loading) {
     return (
@@ -112,6 +135,7 @@ export const EmployeeDashboard = () => {
       </div>
     );
   }
+  const storageMB = data?.myStorageBytes ? Math.round(data.myStorageBytes / (1024 * 1024)) : 0;
 
   const statCards = [
     {
@@ -137,10 +161,10 @@ export const EmployeeDashboard = () => {
       sparkData: [3, 2, 4, 3, 2, 1, 1],
     },
     {
-      title: 'Org Documents',
-      value: data?.orgTotalDocuments || 0,
+      title: 'Approved Docs',
+      value: data?.myApprovedWorkflows || 0,
       icon: TrendingUp,
-      trend: '+15%',
+      trend: 'Verified',
       isPositive: true,
       color: 'from-emerald-500 to-teal-600',
       shadow: 'shadow-emerald-500/25',
@@ -149,9 +173,9 @@ export const EmployeeDashboard = () => {
     },
     {
       title: 'Storage Used',
-      value: 24,
+      value: storageMB,
       icon: Cloud,
-      trend: '24 GB',
+      trend: `${storageMB} MB`,
       isPositive: true,
       color: 'from-purple-500 to-fuchsia-600',
       shadow: 'shadow-purple-500/25',
@@ -237,7 +261,14 @@ export const EmployeeDashboard = () => {
               </div>
             </div>
             <h1 className="text-3xl md:text-4xl font-black tracking-tight mb-2">
-              <span className="animated-gradient-text">Good morning, {user?.name?.split(' ')[0] || 'Employee'}</span>{' '}
+              <span className="animated-gradient-text">
+                {(() => {
+                  const hour = new Date().getHours();
+                  if (hour < 12) return 'Good morning';
+                  if (hour < 18) return 'Good afternoon';
+                  return 'Good evening';
+                })()}, {user?.name?.split(' ')[0] || 'Employee'}
+              </span>{' '}
               <span className="inline-block hover:rotate-12 hover:scale-125 transition-transform origin-bottom-right cursor-default">👋</span>
             </h1>
             <p className="text-slate-500 dark:text-slate-400 font-medium text-lg">Here's your personal operational overview.</p>
@@ -309,7 +340,7 @@ export const EmployeeDashboard = () => {
                 <h3 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{stat.title}</h3>
                 <div className="text-4xl font-black text-slate-900 dark:text-white tracking-tight">
                   {stat.title === 'Storage Used' ? (
-                    <span><Counter to={stat.value} /> <span className="text-xl font-bold text-slate-400">GB</span></span>
+                    <span><Counter to={stat.value} /> <span className="text-xl font-bold text-slate-400">MB</span></span>
                   ) : (
                     <Counter to={stat.value} />
                   )}
@@ -317,7 +348,7 @@ export const EmployeeDashboard = () => {
               </div>
               {stat.title === 'Storage Used' ? (
                 <div className="opacity-80">
-                  <CircularGauge value={24} max={50} label="GB" color="#a855f7" />
+                  <CircularGauge value={stat.value} max={100} label="MB" color="#a855f7" />
                 </div>
               ) : (
                 <div className="opacity-60 group-hover:opacity-100 transition-opacity duration-300">

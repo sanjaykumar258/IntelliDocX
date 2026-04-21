@@ -2,11 +2,10 @@ import { useEffect, useState } from 'react';
 import { api } from '@/api/client';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
-  Headphones, AlertTriangle, Clock, CheckCircle2, Loader2, MessageSquare,
-  Send, X, Zap, Sparkles, Shield, ArrowRight, User, Bug, ChevronDown,
-  Activity, TrendingUp, Timer
+  Headphones, AlertTriangle, CheckCircle2, Loader2, MessageSquare,
+  Send, Zap, Activity, TrendingUp
 } from 'lucide-react';
-import { motion, useMotionValue, animate, AnimatePresence } from 'framer-motion';
+import { motion, useMotionValue, animate } from 'framer-motion';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/store';
 import { AnnouncementsWidget } from '@/components/widgets/AnnouncementsWidget';

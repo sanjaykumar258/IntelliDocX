@@ -4,7 +4,7 @@ import { Document } from '@/types';
 import { 
   Search, Grid, List as ListIcon, ChevronRight, FileText, Briefcase, Users, 
   BarChart3, Scale, FolderKanban, DollarSign, UserCheck, Brain, Sparkles, 
-  Filter, TrendingUp, Clock
+  Filter, TrendingUp, Clock, Trash2, Check
 } from 'lucide-react';
 import { UploadModal } from '@/components/documents/UploadModal';
 import { DocumentGrid } from '@/components/documents/DocumentGrid';
@@ -16,6 +16,8 @@ import { DeleteConfirmationModal } from '@/components/documents/DeleteConfirmati
 import { DocumentPreviewModal } from '@/components/documents/DocumentPreviewModal';
 import { motion, AnimatePresence } from 'framer-motion';
 import { socketService } from '@/api/socketService';
+import { useSelector } from 'react-redux';
+import { RootState } from '@/store';
 
 // ═══ FILTER CATEGORY CONFIGURATION ═══
 const FILTER_CATEGORIES = [
@@ -44,6 +46,11 @@ export const DocumentsPage = () => {
   const [activeFilter, setActiveFilter] = useState('All');
   const [totalCount, setTotalCount] = useState(0);
   const { toast } = useToast();
+
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [isDeletingAll, setIsDeletingAll] = useState(false);
+  const { user } = useSelector((state: RootState) => state.auth);
 
   // Keep a ref to activeFilter so fetchDocuments can always use the latest value
   // without being re-created every time activeFilter changes (which would reset socket listeners)
@@ -164,6 +171,57 @@ export const DocumentsPage = () => {
       }
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedDocs(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedDocs.size === 0) return;
+    setIsBulkDeleting(true);
+    const ids = Array.from(selectedDocs);
+    // Optimistic UI updates
+    setDocuments(prev => prev.filter(d => !ids.includes(d.id)));
+    setTotalCount(prev => Math.max(0, prev - ids.length));
+    setSelectedDocs(new Set());
+    
+    try {
+      const response = await api.delete(`/documents/bulk?ids=${ids.join(',')}`);
+      if (response.status === 202) {
+        toast({ title: "Deletion Requested", description: "Your bulk delete request has been forwarded for admin approval.", className: "bg-indigo-950 text-white border-0" });
+        fetchDocuments();
+      } else {
+        toast({ title: "Assets Purged", description: `${ids.length} documents deleted.`, className: "bg-slate-900 text-white border-0" });
+      }
+    } catch (error) {
+      fetchDocuments();
+      toast({ variant: "destructive", title: "Error", description: "Bulk delete failed." });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (!window.confirm("WARNING: Are you sure you want to permanently delete ALL documents in the vault? This cannot be undone.")) return;
+    setIsDeletingAll(true);
+    try {
+      await api.delete('/documents/all');
+      toast({ title: "Vault Purged", description: "All documents have been deleted.", className: "bg-rose-600 text-white border-0" });
+      setDocuments([]);
+      setTotalCount(0);
+      setSelectedDocs(new Set());
+    } catch (error) {
+      fetchDocuments();
+      toast({ variant: "destructive", title: "Error", description: "Purge failed. You may lack permissions." });
+    } finally {
+      setIsDeletingAll(false);
     }
   };
 
@@ -390,10 +448,52 @@ export const DocumentsPage = () => {
                 matching "{searchQuery}"
               </span>
             )}
+            {selectedDocs.size > 0 && (
+               <span className="text-sm font-bold text-indigo-600 ml-4">
+                 {selectedDocs.size} selected
+               </span>
+            )}
           </div>
-          <span className="text-xs font-medium text-slate-400">
-            Sorted by latest
-          </span>
+          <div className="flex items-center gap-3">
+            {selectedDocs.size > 0 && (
+              <button 
+                onClick={handleBulkDelete} 
+                disabled={isBulkDeleting}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 hover:bg-rose-100 dark:bg-rose-500/10 dark:text-rose-400 dark:hover:bg-rose-500/20 text-xs font-bold rounded-lg transition-colors border border-rose-200 dark:border-rose-500/20"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isBulkDeleting ? 'Deleting...' : 'Delete Selected'}
+              </button>
+            )}
+            {(user?.role === 'SUPER_ADMIN' || user?.role === 'ADMIN') && documents.length > 0 && (
+              <button 
+                onClick={handleDeleteAll} 
+                disabled={isDeletingAll}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white hover:bg-red-700 text-xs font-bold rounded-lg transition-colors shadow-sm shadow-red-500/20"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {isDeletingAll ? 'Purging Vault...' : 'Delete All'}
+              </button>
+            )}
+            {documents.length > 0 && (
+               <button
+                 onClick={() => {
+                   if (selectedDocs.size === documents.length) {
+                     setSelectedDocs(new Set());
+                   } else {
+                     setSelectedDocs(new Set(documents.map(d => d.id)));
+                   }
+                 }}
+                 className="flex items-center gap-1.5 ml-2 text-xs font-bold text-slate-500 hover:text-indigo-600 bg-slate-100 hover:bg-indigo-50 dark:bg-slate-800 dark:hover:bg-indigo-500/10 dark:text-slate-400 px-3 py-1.5 rounded-lg transition-colors border border-slate-200 dark:border-slate-700"
+               >
+                 <Check className="w-3.5 h-3.5" />
+                 {selectedDocs.size === documents.length ? 'Deselect All' : 'Select All'}
+               </button>
+            )}
+            <span className="text-xs font-medium text-slate-400 ml-2">
+              Sorted by latest
+            </span>
+          </div>
         </motion.div>
       )}
 
@@ -434,6 +534,7 @@ export const DocumentsPage = () => {
                   const doc = documents.find(d => d.id === id);
                   handleDelete(id, doc?.title || 'Unknown');
                 }} onDownload={handleDownload} onPreview={handlePreview} onChat={handleChat}
+                selectedDocs={selectedDocs} onToggleSelect={toggleSelect}
               />
             </motion.div>
           ) : (
@@ -443,6 +544,14 @@ export const DocumentsPage = () => {
                   const doc = documents.find(d => d.id === id);
                   handleDelete(id, doc?.title || 'Unknown');
                 }} onDownload={handleDownload} onPreview={handlePreview} onChat={handleChat}
+                selectedDocs={selectedDocs} onToggleSelect={toggleSelect}
+                onSelectAll={(all) => {
+                  if (all) {
+                    setSelectedDocs(new Set(documents.map(d => d.id)));
+                  } else {
+                    setSelectedDocs(new Set());
+                  }
+                }}
               />
             </motion.div>
           )}

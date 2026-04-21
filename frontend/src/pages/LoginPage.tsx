@@ -15,6 +15,9 @@ export const LoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [focusedInput, setFocusedInput] = useState<'email' | 'password' | null>(null);
+  const [requires2fa, setRequires2fa] = useState(false);
+  const [tempUserId, setTempUserId] = useState('');
+  const [otpToken, setOtpToken] = useState('');
 
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -26,7 +29,14 @@ export const LoginPage = () => {
 
     try {
       const response = await api.post('/auth/login', { email, password });
-      const { accessToken } = response.data;
+      if (response.data.requires2fa) {
+        // 2FA is required — stop spinner and show OTP form
+        setRequires2fa(true);
+        setTempUserId(response.data.userId);
+        setLoading(false); // ← Fix: was missing, causing stuck spinner
+        return;
+      }
+      const { accessToken, refreshToken, user: backendUser } = response.data;
       const decoded: any = jwtDecode(accessToken);
 
       const user = {
@@ -34,9 +44,11 @@ export const LoginPage = () => {
         email: decoded.email,
         role: decoded.role,
         organizationId: decoded.organizationId,
-        name: decoded.email.split('@')[0]
+        name: decoded.name || decoded.email.split('@')[0],
+        isTwoFactorEnabled: backendUser?.isTwoFactorEnabled || false,
+        avatarUrl: backendUser?.avatarUrl || null,
       };
-      dispatch(loginSuccess({ token: accessToken, user }));
+      dispatch(loginSuccess({ token: accessToken, refreshToken, user }));
       navigate(`/`);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Invalid credentials');
@@ -45,6 +57,36 @@ export const LoginPage = () => {
     }
   };
 
+  
+  const handleVerify2faLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const response = await api.post('/auth/login/2fa', { userId: tempUserId, token: otpToken });
+      const { accessToken, refreshToken, user: backendUser } = response.data;
+      const decoded: any = jwtDecode(accessToken);
+
+      const user = {
+        id: decoded.userId,
+        email: decoded.email,
+        role: decoded.role,
+        organizationId: decoded.organizationId,
+        name: decoded.name || decoded.email.split('@')[0],
+        isTwoFactorEnabled: true,
+        avatarUrl: backendUser?.avatarUrl || null,
+      };
+
+      dispatch(loginSuccess({ token: accessToken, refreshToken, user }));
+      navigate('/');
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Invalid 2FA token');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  
   const staggerContainer = {
     hidden: { opacity: 0 },
     show: {
@@ -144,12 +186,12 @@ export const LoginPage = () => {
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-500 to-purple-500" />
 
             <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">Welcome Back</h2>
-              <p className="text-sm text-slate-500 dark:text-slate-400">Sign in to access your secure workspace.</p>
+              <h2 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{requires2fa ? "Two-Factor Authentication" : "Welcome Back"}</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">{requires2fa ? "Enter the security code from your authenticator app." : "Sign in to access your secure workspace."}</p>
             </div>
 
             <motion.form 
-              onSubmit={handleLogin} 
+              onSubmit={requires2fa ? handleVerify2faLogin : handleLogin} 
               className="space-y-6"
               variants={staggerContainer}
               initial="hidden"
@@ -169,7 +211,20 @@ export const LoginPage = () => {
                 )}
               </AnimatePresence>
 
-              {/* Float Label Input: Email */}
+              {requires2fa ? (
+                <motion.div variants={slideIn} className="relative mb-6">
+                  <input
+                    type="text" required value={otpToken} onChange={e => setOtpToken(e.target.value)}
+                    className="peer w-full h-14 bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 rounded-xl px-4 text-center text-xl tracking-[0.5em] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 transition-all placeholder-transparent"
+                    placeholder="000000" maxLength={6}
+                  />
+                  <label className="absolute left-1/2 -translate-x-1/2 -top-2 text-xs font-medium bg-white dark:bg-slate-900 px-2 text-indigo-600 dark:text-indigo-400">
+                    6-Digit Authenticator Code
+                  </label>
+                </motion.div>
+              ) : (
+                <>
+{/* Float Label Input: Email */}
               <motion.div variants={slideIn} className="relative">
                 <input
                   id="email"
@@ -237,6 +292,9 @@ export const LoginPage = () => {
                 </a>
               </motion.div>
 
+              
+                </>
+              )}
               <motion.div variants={slideIn} className="pt-2">
                 <Button 
                   type="submit" 

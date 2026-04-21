@@ -44,13 +44,13 @@ export const Sidebar = ({ className }: SidebarProps) => {
       title: 'Documents',
       href: '/documents',
       icon: FileText,
-      show: true,
+      show: !['HR_MANAGER', 'IT_MANAGER'].includes(user?.role || ''),
     },
     {
-      title: 'Workflows',
-      href: '/workflows',
+      title: user?.role === 'EMPLOYEE' ? 'My Approvals' : 'Workflows',
+      href: user?.role === 'EMPLOYEE' ? '/my-approvals' : '/workflows',
       icon: GitPullRequest,
-      show: user?.role !== 'GUEST',
+      show: !['GUEST', 'HR_MANAGER', 'IT_MANAGER'].includes(user?.role || ''),
     },
     {
       title: 'Audit Logs',
@@ -104,7 +104,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
       )}
     >
       {/* Subtle Right Border Gradient */}
-      <div className="absolute right-0 top-0 w-[1px] h-full bg-gradient-to-b from-transparent via-indigo-500/20 to-transparent" />
+      <div className="absolute right-0 top-0 w-[1px] h-full bg-gradient-to-b from-transparent via-primary/20 to-transparent" />
 
       {/* Header */}
       <div className="flex items-center justify-between h-20 px-6 border-b border-slate-200/50 dark:border-slate-800/50">
@@ -117,7 +117,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
               transition={{ duration: 0.2 }}
               className="flex items-center gap-2 overflow-hidden"
             >
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center shadow-md">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center shadow-md">
                 <FileText className="w-4 h-4 text-white" />
               </div>
               <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-slate-600 dark:from-white dark:to-slate-400 tracking-tight pl-1">
@@ -148,7 +148,7 @@ export const Sidebar = ({ className }: SidebarProps) => {
               {isActive && (
                 <motion.div
                   layoutId="activeNavIndicator"
-                  className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 dark:from-purple-500/20 dark:to-indigo-500/20 border border-indigo-500/20 rounded-xl"
+                  className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-primary/10 dark:from-purple-500/20 dark:to-primary/20 border border-primary/20 rounded-xl"
                   initial={false}
                   transition={{ type: 'spring', stiffness: 300, damping: 30 }}
                 />
@@ -158,18 +158,18 @@ export const Sidebar = ({ className }: SidebarProps) => {
                 className={cn(
                   "relative flex items-center h-12 px-3 rounded-xl transition-all duration-200",
                   isActive 
-                    ? "text-indigo-700 dark:text-indigo-300 font-semibold" 
+                    ? "text-primary dark:text-primary font-semibold" 
                     : "text-slate-600 dark:text-slate-400 font-medium hover:text-slate-900 dark:hover:text-slate-200 group-hover:bg-slate-100/50 dark:group-hover:bg-slate-800/50",
                   collapsed ? "justify-center" : "justify-start"
                 )}
                 title={collapsed ? item.title : undefined}
               >
                 <div className="relative flex items-center justify-center">
-                  <item.icon className={cn("w-5 h-5 transition-transform duration-200 group-hover:scale-110", isActive && "text-indigo-600 dark:text-indigo-400")} />
+                  <item.icon className={cn("w-5 h-5 transition-transform duration-200 group-hover:scale-110", isActive && "text-primary dark:text-primary")} />
                   {isActive && (
                     <motion.div 
                       layoutId="activeIconGlow"
-                      className="absolute inset-0 bg-indigo-500 blur-md opacity-40 rounded-full"
+                      className="absolute inset-0 bg-primary blur-md opacity-40 rounded-full"
                     />
                   )}
                 </div>
@@ -197,8 +197,12 @@ export const Sidebar = ({ className }: SidebarProps) => {
       <div className="p-4 border-t border-slate-200/50 dark:border-slate-800/50">
         <div className={cn("flex items-center gap-3", collapsed ? "justify-center" : "justify-between")}>
           <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-md shrink-0">
-              {user?.name?.charAt(0)?.toUpperCase() || 'U'}
+            <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-primary to-purple-500 flex items-center justify-center text-white font-bold shadow-md shrink-0 overflow-hidden">
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+              ) : (
+                user?.name?.charAt(0)?.toUpperCase() || 'U'
+              )}
             </div>
             
             <AnimatePresence mode="wait">

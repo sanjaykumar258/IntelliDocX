@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { motion } from 'framer-motion';
 import { format } from 'date-fns';
-import { Download, Trash2, Eye, ShieldCheck, Sparkles, MessageSquare, ShieldAlert, FileText, Image, FileSpreadsheet, File, Clock, Tag } from 'lucide-react';
+import { Download, Trash2, Eye, ShieldCheck, Sparkles, MessageSquare, ShieldAlert, FileText, Image, FileSpreadsheet, File, Clock, Tag, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Document } from '@/types';
 import { Progress } from '@/components/ui/progress';
@@ -103,9 +103,11 @@ interface DocumentCardProps {
   onVerify: (id: string, title: string) => void;
   onChat: (id: string, title: string) => void;
   onDelete: (id: string) => void;
+  isSelected?: boolean;
+  onToggleSelect?: () => void;
 }
 
-export const DocumentCard = memo(({ document, index, onDownload, onPreview, onVerify, onChat, onDelete }: DocumentCardProps) => {
+export const DocumentCard = memo(({ document, index, onDownload, onPreview, onVerify, onChat, onDelete, isSelected, onToggleSelect }: DocumentCardProps) => {
   const extension = document.title.split('.').pop()?.toUpperCase() || 'FILE';
   const category = (document.category || document.metadata?.category || 'OTHER').toUpperCase();
   const categoryStyle = CATEGORY_STYLES[category] || CATEGORY_STYLES['OTHER'];
@@ -114,17 +116,52 @@ export const DocumentCard = memo(({ document, index, onDownload, onPreview, onVe
   const fileIcon = getFileIcon(document.mimeType);
   const IconComp = fileIcon.icon;
   
-  // Extract useful metadata fields (skip AI verbose data)
-  const metadataFields = document.metadata?.customFields 
-    ? Object.entries(document.metadata.customFields)
-        .filter(([, v]) => typeof v === 'string' || typeof v === 'number')
-        .filter(([k]) => !k.startsWith('ai') && !k.startsWith('classified') && k !== 'parentCategory' && k !== 'subCategory')
-        .slice(0, 4)
-    : [];
+  // ─── TYPED METADATA: Always exactly 6 fields ───
+  const metadata = document.metadata;
+  const customFields: Record<string, any> = metadata?.customFields || {};
+  const typedMeta: Record<string, { label: string; value: string; isFallback: boolean }> = customFields?.typedMeta || {};
+  const parentCategory = (customFields?.parentCategory as string) || '';
 
-  // Get parent category for badge
-  const parentCategory = document.metadata?.customFields?.parentCategory as string || '';
-  
+  // Build the 6-field display array
+  type MetaRow = { label: string; value: string; isFallback: boolean };
+  let metadataRows: MetaRow[] = [];
+
+  if (Object.keys(typedMeta).length > 0) {
+    // ✅ NEW FORMAT: use typed metadata directly (always 6 fields)
+    metadataRows = Object.values(typedMeta).slice(0, 6);
+  } else {
+    // ⬇️ LEGACY FALLBACK: build from old flat customFields
+    const skipKeys = new Set(['parentcategory', 'subcategory', 'extractedtext', 'classifiedby', 'classifiedat', 'typedmeta']);
+    for (const [k, v] of Object.entries(customFields)) {
+      const key = k.toLowerCase();
+      if (skipKeys.has(key) || key.startsWith('ai') || key.startsWith('related')) continue;
+      if (v !== null && v !== undefined && v !== '' && (typeof v === 'string' || typeof v === 'number')) {
+        metadataRows.push({
+          label: k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim(),
+          value: String(v).substring(0, 60),
+          isFallback: false,
+        });
+      }
+    }
+    // Pad fallbacks to always show 6 rows
+    if (metadataRows.length < 6 && metadata) {
+      if (metadata.department && metadata.department !== 'General') {
+        metadataRows.push({ label: 'Department', value: metadata.department, isFallback: false });
+      }
+      if (metadata.tags && metadata.tags.length > 0) {
+        metadataRows.push({ label: 'Focus', value: metadata.tags.slice(0, 3).join(', '), isFallback: false });
+      }
+      if (metadata.category) {
+        metadataRows.push({ label: 'Type', value: metadata.category.replace(/_/g, ' '), isFallback: false });
+      }
+    }
+    // Fill remaining slots with "Not detected"
+    while (metadataRows.length < 6) {
+      metadataRows.push({ label: '—', value: 'Not detected', isFallback: true });
+    }
+    metadataRows = metadataRows.slice(0, 6);
+  }
+
   // File size display
   const fileSizeMB = ((document.fileSize || 0) / 1024 / 1024).toFixed(2);
   const fileSizeDisplay = parseFloat(fileSizeMB) < 0.01 ? '<0.01 MB' : `${fileSizeMB} MB`;
@@ -138,9 +175,9 @@ export const DocumentCard = memo(({ document, index, onDownload, onPreview, onVe
       className="group relative"
     >
       {/* Hover glow */}
-      <div className={`absolute -inset-0.5 bg-gradient-to-b ${categoryStyle.glow} opacity-0 group-hover:opacity-[0.08] rounded-[26px] blur-sm transition-opacity duration-500`} />
+      <div className={`absolute -inset-0.5 bg-gradient-to-b ${categoryStyle.glow} opacity-0 group-hover:opacity-[0.08] rounded-[26px] blur-sm transition-opacity duration-500 ${isSelected ? 'opacity-[0.12] scale-[1.02]' : ''}`} />
       
-      <div className="h-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border border-slate-200/60 dark:border-slate-800/60 p-5 rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between overflow-hidden relative">
+      <div className={`h-full bg-white/80 dark:bg-slate-900/80 backdrop-blur-2xl border ${isSelected ? 'border-indigo-400 dark:border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-200/60 dark:border-slate-800/60'} p-5 rounded-3xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 ease-out flex flex-col justify-between overflow-hidden relative`}>
         
         {/* Top color accent line */}
         <div className={`absolute top-0 left-0 w-full h-0.5 bg-gradient-to-r ${categoryStyle.glow}`}>
@@ -150,6 +187,19 @@ export const DocumentCard = memo(({ document, index, onDownload, onPreview, onVe
         {/* ── Header ── */}
         <div className="flex items-start justify-between mb-3 relative z-10">
           <div className="flex items-center gap-3 w-full pr-8">
+            {onToggleSelect && (
+              <button 
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
+                className={`w-[18px] h-[18px] shrink-0 rounded flex items-center justify-center transition-all shadow-sm border ${
+                  isSelected 
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-indigo-500/20' 
+                    : 'bg-white/80 dark:bg-slate-800/80 border-slate-300 dark:border-slate-600 text-transparent opacity-0 group-hover:opacity-100 hover:border-indigo-400'
+                } ${isSelected ? 'opacity-100' : ''}`}
+              >
+                <Check strokeWidth={4} className="w-2.5 h-2.5" />
+              </button>
+            )}
             <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shrink-0 shadow-sm ${fileIcon.color}`}>
               <IconComp className="w-5 h-5" />
             </div>
@@ -238,16 +288,33 @@ export const DocumentCard = memo(({ document, index, onDownload, onPreview, onVe
           </div>
         )}
 
-        {/* ── Extracted Metadata Grid ── */}
-        {metadataFields.length > 0 && (
-          <div className="mb-3 bg-slate-50/80 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/60 rounded-xl p-2.5 space-y-1 relative z-10">
-            {metadataFields.map(([k, v]) => (
-              <div key={k} className="flex justify-between items-center text-[10px] w-full gap-2">
-                <span className="font-semibold text-slate-400 dark:text-slate-500 capitalize truncate shrink-0 max-w-[40%]">
-                  {k.replace(/([A-Z])/g, ' $1').replace(/_/g, ' ').trim()}
+        {/* ── Typed Metadata Grid — always exactly 6 rows ── */}
+        {document.processingStatus === 'PROCESSING' ? (
+          <div className="mb-3 bg-slate-50/80 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/60 rounded-xl p-2.5 space-y-2 relative z-10">
+            {[1,2,3,4,5,6].map(i => (
+              <div key={i} className="flex justify-between items-center gap-2">
+                <div className={`h-2 bg-slate-200 dark:bg-slate-700 rounded animate-pulse`} style={{ width: `${30 + (i * 5)}%` }} />
+                <div className={`h-2 bg-slate-200 dark:bg-slate-700 rounded animate-pulse`} style={{ width: `${25 + (i * 3)}%` }} />
+              </div>
+            ))}
+            <p className="text-[9px] font-bold text-indigo-500 animate-pulse text-center mt-1 uppercase tracking-widest">Neural Scan in Progress...</p>
+          </div>
+        ) : (
+          <div className="mb-3 bg-slate-50/80 dark:bg-slate-800/30 border border-slate-100 dark:border-slate-800/60 rounded-xl p-2.5 space-y-0.5 relative z-10">
+            {metadataRows.map((row, i) => (
+              <div key={i} className="flex justify-between items-center text-[10px] w-full gap-2 py-[3px] border-b border-slate-100/40 dark:border-slate-800/30 last:border-0">
+                <span className="font-semibold text-slate-400 dark:text-slate-500 truncate shrink-0 max-w-[42%]">
+                  {row.label}
                 </span>
-                <span className="font-bold text-slate-700 dark:text-slate-300 truncate text-right" title={String(v)}>
-                  {String(v)}
+                <span 
+                  className={`truncate text-right max-w-[55%] ${
+                    row.isFallback 
+                      ? 'text-slate-300 dark:text-slate-600 italic font-normal' 
+                      : 'font-bold text-slate-700 dark:text-slate-300'
+                  }`}
+                  title={row.value}
+                >
+                  {row.value}
                 </span>
               </div>
             ))}
